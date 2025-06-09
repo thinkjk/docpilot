@@ -313,15 +313,8 @@ docpilot/
 │       ├── codeblock.rs           # Code block formatting
 │       └── markdown_formatting_demo.test.rs # Formatting demos
 ├── tests/                         # Integration and E2E tests
-│   └── e2e_usability_test.rs      # Comprehensive end-to-end tests
 ├── scripts/                       # Build and test automation
-│   └── run_e2e_tests.sh           # E2E test runner script
 ├── docs/                          # Project documentation
-│   ├── makefile-guide.md          # Comprehensive Makefile documentation
-│   ├── e2e-testing-guide.md       # End-to-end testing guide
-│   ├── cli-documentation.md       # CLI command reference
-│   ├── ai-integration-implementation.md # AI integration details
-│   └── session-persistence-recovery.md # Session management docs
 ├── Makefile                       # Development workflow automation
 ├── Cargo.toml                     # Rust project configuration
 └── README.md                      # Project overview and quick start
