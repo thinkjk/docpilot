@@ -403,44 +403,23 @@ async fn main() -> Result<()> {
                                     println!("📝 Background process PID: {} (saved to {})", pid, pid_file.display());
                                 }
                                 
-                                // Create a detached background process instead of using tokio::spawn
-                                // The issue is that tokio::spawn gets terminated when main process exits
-                                
-                                // For now, let's use a simpler approach - run a persistent background loop
-                                // that doesn't depend on the main process staying alive
-                                
                                 println!("✅ DocPilot is now running in the background!");
                                 println!("   Your terminal is free to use normally.");
                                 println!("   All commands will be captured automatically.");
                                 
-                                // Run the monitoring in a separate thread that will persist
-                                let mut monitor_clone = monitor;
-                                let mut session_manager_clone = session_manager;
-                                let pid_file_clone = pid_file.clone();
+                                // Run the monitoring directly in the main process
+                                // This ensures the background monitoring continues running
+                                if let Err(e) = monitor_with_session(&mut monitor, &mut session_manager).await {
+                                    eprintln!("❌ Error during background monitoring: {}", e);
+                                    if let Some(session) = session_manager.get_current_session_mut() {
+                                        session.set_error(format!("Background monitoring error: {}", e));
+                                        let session_clone = session.clone();
+                                        let _ = session_manager.save_session(&session_clone);
+                                    }
+                                }
                                 
-                                std::thread::spawn(move || {
-                                    // Create a new tokio runtime for this thread
-                                    let rt = tokio::runtime::Runtime::new().unwrap();
-                                    rt.block_on(async {
-                                        if let Err(e) = monitor_with_session(&mut monitor_clone, &mut session_manager_clone).await {
-                                            eprintln!("❌ Error during background monitoring: {}", e);
-                                            // Try to update session with error
-                                            if let Ok(mut sm) = SessionManager::new() {
-                                                if let Some(session) = sm.get_current_session_mut() {
-                                                    session.set_error(format!("Background monitoring error: {}", e));
-                                                    let session_clone = session.clone();
-                                                    let _ = sm.save_session(&session_clone);
-                                                }
-                                            }
-                                        }
-                                        
-                                        // Clean up PID file when done
-                                        let _ = fs::remove_file(&pid_file_clone);
-                                    });
-                                });
-                                
-                                // Give the background thread a moment to start
-                                std::thread::sleep(std::time::Duration::from_millis(100));
+                                // Clean up PID file when done
+                                let _ = fs::remove_file(&pid_file);
                             }
                         }
                         Err(e) => {

@@ -27,6 +27,8 @@ pub struct TerminalMonitor {
     monitoring: bool,
     pub(crate) shell_type: ShellType,
     pub(crate) platform: Platform,
+    last_history_size: u64,
+    session_start_time: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone)]
@@ -91,6 +93,8 @@ impl TerminalMonitor {
             monitoring: false,
             shell_type: ShellType::detect(),
             platform,
+            last_history_size: 0,
+            session_start_time: Utc::now(),
         })
     }
 
@@ -110,6 +114,15 @@ impl TerminalMonitor {
             println!("Detected terminal session: {}", session);
         }
 
+        // Record the current history file size to avoid capturing old commands
+        if let Some(history_file) = self.shell_type.history_file() {
+            if let Ok(metadata) = fs::metadata(&history_file) {
+                self.last_history_size = metadata.len();
+                println!("Starting from history position: {} bytes", self.last_history_size);
+            }
+        }
+
+        self.session_start_time = Utc::now();
         self.monitoring = true;
         Ok(())
     }
@@ -151,29 +164,46 @@ impl TerminalMonitor {
 
         let mut new_commands = Vec::new();
 
-        if let Ok(history_bytes) = fs::read(&history_file) {
-            let content = String::from_utf8_lossy(&history_bytes);
-            // Parse recent commands from the history file
-            let lines: Vec<&str> = content.lines().collect();
-            
-            // Get the last 10 lines to check for new commands
-            let recent_lines = if lines.len() > 10 {
-                &lines[lines.len() - 10..]
-            } else {
-                &lines
-            };
-            
-            for line in recent_lines {
-                if let Some(command) = self.parse_history_line(line) {
-                    // Check if we already have this command (avoid duplicates by command text only)
-                    // We can't rely on timestamp matching since we create new timestamps
-                    if !self.commands.iter().any(|existing| existing.command == command.command) {
+        // Check if the file has grown since last check
+        let current_metadata = fs::metadata(&history_file)?;
+        let current_size = current_metadata.len();
+        
+        if current_size <= self.last_history_size {
+            // No new content
+            return Ok(new_commands);
+        }
+
+        // Read only the new content
+        let history_bytes = fs::read(&history_file)?;
+        let content = String::from_utf8_lossy(&history_bytes);
+        let lines: Vec<&str> = content.lines().collect();
+        
+        // Calculate approximately where to start reading from
+        let bytes_per_line_estimate = if lines.is_empty() { 50 } else { content.len() / lines.len() };
+        let estimated_old_lines = (self.last_history_size as usize) / bytes_per_line_estimate;
+        
+        // Start from the estimated position, but be conservative
+        let start_line = if estimated_old_lines > 5 { estimated_old_lines - 5 } else { 0 };
+        let start_line = start_line.min(lines.len());
+        
+        for line in lines.iter().skip(start_line) {
+            if let Some(command) = self.parse_history_line(line) {
+                // Only add commands that were executed after session start
+                if command.timestamp >= self.session_start_time {
+                    // Check if we already have this exact command
+                    if !self.commands.iter().any(|existing|
+                        existing.command == command.command &&
+                        (existing.timestamp - command.timestamp).num_seconds().abs() < 2
+                    ) {
                         new_commands.push(command.clone());
                         self.add_command(command);
                     }
                 }
             }
         }
+
+        // Update the last known size
+        self.last_history_size = current_size;
 
         Ok(new_commands)
     }
@@ -228,26 +258,43 @@ impl TerminalMonitor {
             return None;
         }
 
-        let command = match self.shell_type {
+        let (command, timestamp) = match self.shell_type {
             ShellType::Zsh => {
                 // Zsh history format: ": timestamp:duration;command"
                 if line.starts_with(": ") {
-                    line.split(';').nth(1)?.to_string()
+                    let parts: Vec<&str> = line.splitn(2, ';').collect();
+                    if parts.len() == 2 {
+                        let command = parts[1].to_string();
+                        // Extract timestamp from ": timestamp:duration"
+                        let timestamp_part = parts[0].trim_start_matches(": ");
+                        let timestamp_str = timestamp_part.split(':').next().unwrap_or("0");
+                        
+                        if let Ok(timestamp_secs) = timestamp_str.parse::<i64>() {
+                            let timestamp = DateTime::from_timestamp(timestamp_secs, 0)
+                                .unwrap_or_else(|| Utc::now());
+                            (command, timestamp)
+                        } else {
+                            (command, Utc::now())
+                        }
+                    } else {
+                        (line.to_string(), Utc::now())
+                    }
                 } else {
-                    line.to_string()
+                    (line.to_string(), Utc::now())
                 }
             }
             ShellType::Fish => {
                 // Fish history format is more complex, simplified here
                 if line.starts_with("- cmd: ") {
-                    line.strip_prefix("- cmd: ")?.to_string()
+                    let command = line.strip_prefix("- cmd: ")?.to_string();
+                    (command, Utc::now())
                 } else {
                     return None;
                 }
             }
             _ => {
                 // Bash and others: simple line format
-                line.to_string()
+                (line.to_string(), Utc::now())
             }
         };
 
@@ -258,7 +305,7 @@ impl TerminalMonitor {
 
         Some(CommandEntry {
             command: command.trim().to_string(),
-            timestamp: Utc::now(),
+            timestamp,
             exit_code: None, // We'll need to implement exit code tracking separately
             working_directory: env::current_dir()
                 .map(|p| p.to_string_lossy().to_string())
