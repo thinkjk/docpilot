@@ -31,7 +31,7 @@ Perfect for creating tutorials, documenting complex procedures, and sharing know
 {all-args}{after-help}
 
 EXAMPLES:
-    # Start documenting a new workflow
+    # Start documenting a new workflow (runs in background by default)
     docpilot start \"Setting up development environment\"
     
     # Add annotations while working
@@ -58,10 +58,12 @@ enum Commands {
     
 This command creates a new session that will capture all terminal commands, allowing you to add annotations and generate comprehensive documentation.
 
+By default, DocPilot runs in background mode, allowing you to continue using your terminal normally while commands are captured automatically.
+
 EXAMPLES:
-    docpilot start \"Setting up development environment\"
-    docpilot start \"Database migration process\" --output migration-guide.md
-    docpilot begin \"API testing workflow\" -o api-tests.md")]
+    docpilot start \"Setting up development environment\"                    # Runs in background (default)
+    docpilot start \"Database migration process\" --output migration-guide.md  # Background with custom output
+    docpilot start \"API testing workflow\" --foreground                      # Runs in foreground for debugging")]
     Start {
         /// Brief description of what you're documenting
         #[arg(help = "Describe what workflow you're documenting")]
@@ -72,7 +74,7 @@ EXAMPLES:
         output: Option<String>,
         
         /// Run in foreground instead of background (for debugging)
-        #[arg(long, help = "Run in foreground instead of background")]
+        #[arg(long, help = "Run in foreground instead of background (default: background)")]
         foreground: bool,
     },
     

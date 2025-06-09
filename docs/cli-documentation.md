@@ -44,9 +44,12 @@ Commands include intuitive aliases for faster typing:
 ### Session Management
 
 ```bash
-# Start documenting a workflow
+# Start documenting a workflow (runs in background by default)
 docpilot start "Setting up development environment"
 docpilot begin "Database migration" --output migration.md
+
+# Run in foreground for debugging
+docpilot start "Debug session" --foreground
 
 # Control session state
 docpilot pause     # Temporarily stop monitoring
@@ -119,7 +122,7 @@ Commands:
   help         Print this message or the help of the given subcommand(s)
 
 EXAMPLES:
-    # Start documenting a new workflow
+    # Start documenting a new workflow (runs in background by default)
     docpilot start "Setting up development environment"
 
     # Add annotations while working
@@ -142,19 +145,25 @@ Begin monitoring terminal commands and start documenting your workflow.
 This command creates a new session that will capture all terminal commands,
 allowing you to add annotations and generate comprehensive documentation.
 
+By default, DocPilot runs in background mode, allowing you to continue using your terminal normally while commands are captured automatically.
+
 EXAMPLES:
-    docpilot start "Setting up development environment"
-    docpilot start "Database migration process" --output migration-guide.md
-    docpilot begin "API testing workflow" -o api-tests.md
+    docpilot start "Setting up development environment"                    # Runs in background (default)
+    docpilot start "Database migration process" --output migration-guide.md  # Background with custom output
+    docpilot start "API testing workflow" --foreground                      # Runs in foreground for debugging
 
-Usage: docpilot start [OPTIONS] --description <DESCRIPTION>
+Usage: docpilot start [OPTIONS] <DESCRIPTION>
 
-Options:
-  -d, --description <DESCRIPTION>
+Arguments:
+  <DESCRIPTION>
           Describe what workflow you're documenting
 
+Options:
   -o, --output <OUTPUT>
           Specify output markdown file (e.g., guide.md)
+
+      --foreground
+          Run in foreground instead of background (default: background)
 ```
 
 ## Error Handling Examples

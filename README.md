@@ -14,6 +14,7 @@ DocPilot automatically captures your terminal commands and generates comprehensi
 
 - **Cross-platform terminal monitoring** (Linux, macOS)
 - **Multi-shell support** (Bash, Zsh, Fish)
+- **Background monitoring by default** - continue using your terminal normally
 - **Real-time command tracking** with timestamps and context
 - **Automatic success/failure detection**
 
@@ -103,7 +104,7 @@ docpilot --help
 
 ### Basic Workflow
 
-1. **Start a documentation session**:
+1. **Start a documentation session** (runs in background by default):
 
 ```bash
 docpilot start "Setting up a new React project"
@@ -212,9 +213,10 @@ docpilot config --provider ollama --base-url http://localhost:11434
 ### Example 1: Docker Setup Documentation
 
 ```bash
+# Start session (runs in background by default)
 docpilot start "Docker containerization setup"
 
-# Your commands
+# Your commands - DocPilot captures them automatically
 docker build -t myapp .
 docker run -p 3000:3000 myapp
 docker ps
@@ -228,9 +230,10 @@ docpilot generate --output docker-setup.md --template comprehensive
 ### Example 2: Server Deployment
 
 ```bash
+# Start session in background (default behavior)
 docpilot start "Production server deployment"
 
-# Your deployment commands
+# Your deployment commands - monitored automatically
 ssh user@server
 git pull origin main
 npm install --production
@@ -239,6 +242,20 @@ nginx -t && systemctl reload nginx
 
 docpilot stop
 docpilot generate --output deployment-guide.md --include-optimizations
+```
+
+### Example 3: Debugging Session (Foreground Mode)
+
+```bash
+# Run in foreground for debugging purposes
+docpilot start "Debugging network issues" --foreground
+
+# Commands are captured with immediate feedback
+ping google.com
+traceroute google.com
+netstat -an | grep :80
+
+# Press Ctrl+C to stop foreground session
 ```
 
 ## 🏗️ Architecture
