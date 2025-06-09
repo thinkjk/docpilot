@@ -136,10 +136,10 @@ impl TerminalMonitor {
         self.commands.push(command);
     }
 
-    /// Monitor shell history for new commands
-    pub async fn monitor_history(&mut self) -> Result<()> {
+    /// Check shell history for new commands (single check, not a loop)
+    pub async fn check_history_once(&mut self) -> Result<Vec<CommandEntry>> {
         if !self.monitoring {
-            return Ok(());
+            return Ok(Vec::new());
         }
 
         let history_file = self.shell_type.history_file()
@@ -149,32 +149,39 @@ impl TerminalMonitor {
             return Err(anyhow!("History file does not exist: {:?}", history_file));
         }
 
-        // Get initial file size to track new entries
-        let initial_metadata = fs::metadata(&history_file)?;
-        let mut last_size = initial_metadata.len();
+        let mut new_commands = Vec::new();
 
-        println!("Monitoring history file: {:?}", history_file);
-
-        while self.monitoring {
-            sleep(Duration::from_millis(500)).await;
-
-            if let Ok(metadata) = fs::metadata(&history_file) {
-                let current_size = metadata.len();
-                
-                if current_size > last_size {
-                    // New content added to history file
-                    if let Ok(content) = fs::read_to_string(&history_file) {
-                        let new_commands = self.parse_new_commands(&content, last_size)?;
-                        for cmd in new_commands {
-                            self.add_command(cmd);
-                            println!("Captured command: {}", self.commands.last().unwrap().command);
-                        }
+        if let Ok(history_bytes) = fs::read(&history_file) {
+            let content = String::from_utf8_lossy(&history_bytes);
+            // Parse recent commands from the history file
+            let lines: Vec<&str> = content.lines().collect();
+            
+            // Get the last 10 lines to check for new commands
+            let recent_lines = if lines.len() > 10 {
+                &lines[lines.len() - 10..]
+            } else {
+                &lines
+            };
+            
+            for line in recent_lines {
+                if let Some(command) = self.parse_history_line(line) {
+                    // Check if we already have this command (avoid duplicates by command text only)
+                    // We can't rely on timestamp matching since we create new timestamps
+                    if !self.commands.iter().any(|existing| existing.command == command.command) {
+                        new_commands.push(command.clone());
+                        self.add_command(command);
                     }
-                    last_size = current_size;
                 }
             }
         }
 
+        Ok(new_commands)
+    }
+
+    /// Monitor shell history for new commands (legacy method for compatibility)
+    pub async fn monitor_history(&mut self) -> Result<()> {
+        // Just do a single check instead of infinite loop
+        let _new_commands = self.check_history_once().await?;
         Ok(())
     }
 
@@ -189,6 +196,26 @@ impl TerminalMonitor {
         for line in lines.iter().skip(estimated_lines_to_skip) {
             if let Some(command) = self.parse_history_line(line) {
                 commands.push(command);
+            }
+        }
+
+        Ok(commands)
+    }
+
+    /// Parse all commands from history file content (used when file was truncated)
+    fn parse_all_new_commands(&self, content: &str) -> Result<Vec<CommandEntry>> {
+        let mut commands = Vec::new();
+        
+        // Parse all lines in the file
+        for line in content.lines() {
+            if let Some(command) = self.parse_history_line(line) {
+                // Only add if we haven't seen this command before
+                if !self.commands.iter().any(|existing|
+                    existing.command == command.command &&
+                    existing.timestamp.timestamp() == command.timestamp.timestamp()
+                ) {
+                    commands.push(command);
+                }
             }
         }
 
@@ -244,13 +271,26 @@ impl TerminalMonitor {
 
     /// Determine if a command should be ignored
     pub(crate) fn should_ignore_command(&self, command: &str) -> bool {
+        let command = command.trim();
+        
+        // Ignore empty commands
+        if command.is_empty() {
+            return true;
+        }
+        
+        // Ignore very short commands that are likely navigation
+        if command.len() < 2 {
+            return true;
+        }
+        
+        // Only ignore very basic navigation and display commands
         let ignore_patterns = [
-            "ls", "pwd", "cd", "clear", "history", "exit",
-            "echo", "cat", "less", "more", "head", "tail",
+            "ls", "pwd", "cd", "clear", "exit", "history",
         ];
 
         let cmd_parts: Vec<&str> = command.split_whitespace().collect();
         if let Some(first_word) = cmd_parts.first() {
+            // Only ignore if it's an exact match to basic commands
             ignore_patterns.contains(first_word)
         } else {
             true

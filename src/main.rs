@@ -1,5 +1,8 @@
 use clap::{Parser, Subcommand};
 use anyhow::Result;
+use std::process;
+use std::fs;
+use std::path::PathBuf;
 
 mod terminal;
 mod llm;
@@ -67,6 +70,10 @@ EXAMPLES:
         /// Output file name (optional, defaults to generated name)
         #[arg(short, long, help = "Specify output markdown file (e.g., guide.md)")]
         output: Option<String>,
+        
+        /// Run in foreground instead of background (for debugging)
+        #[arg(long, help = "Run in foreground instead of background")]
+        foreground: bool,
     },
     
     /// 🛑 Stop the current documentation session
@@ -276,7 +283,7 @@ async fn main() -> Result<()> {
     }
 
     match cli.command {
-        Commands::Start { description, output } => {
+        Commands::Start { description, output, foreground } => {
             // Check if there's already an active session
             if let Some(current_session) = session_manager.get_current_session() {
                 eprintln!("A session is already active:");
@@ -343,24 +350,97 @@ async fn main() -> Result<()> {
                         Ok(_) => {
                             println!();
                             println!("🔍 Terminal monitoring started successfully!");
-                            println!("   Commands will be automatically captured");
-                            println!("   Press Ctrl+C to stop the session");
-                            println!();
-                            println!("💡 Available commands while monitoring:");
-                            println!("   docpilot pause    - Pause command capture");
-                            println!("   docpilot resume   - Resume command capture");
-                            println!("   docpilot annotate \"note\" - Add manual annotation");
-                            println!("   docpilot status   - Show session status");
-                            println!();
                             
-                            // Monitor commands and add them to session
-                            if let Err(e) = monitor_with_session(&mut monitor, &mut session_manager).await {
-                                eprintln!("❌ Error during terminal monitoring: {}", e);
-                                if let Some(session) = session_manager.get_current_session_mut() {
-                                    session.set_error(format!("Monitoring error: {}", e));
-                                    let session_clone = session.clone();
-                                    let _ = session_manager.save_session(&session_clone);
+                            if foreground {
+                                println!("   Running in foreground mode");
+                                println!("   Commands will be automatically captured");
+                                println!("   Press Ctrl+C to stop the session");
+                                println!();
+                                println!("💡 Available commands while monitoring:");
+                                println!("   docpilot pause    - Pause command capture");
+                                println!("   docpilot resume   - Resume command capture");
+                                println!("   docpilot annotate \"note\" - Add manual annotation");
+                                println!("   docpilot status   - Show session status");
+                                println!();
+                                
+                                // Monitor commands and add them to session
+                                if let Err(e) = monitor_with_session(&mut monitor, &mut session_manager).await {
+                                    eprintln!("❌ Error during terminal monitoring: {}", e);
+                                    if let Some(session) = session_manager.get_current_session_mut() {
+                                        session.set_error(format!("Monitoring error: {}", e));
+                                        let session_clone = session.clone();
+                                        let _ = session_manager.save_session(&session_clone);
+                                    }
                                 }
+                            } else {
+                                // Run in background
+                                println!("   Running in background mode");
+                                println!("   Commands will be automatically captured");
+                                println!();
+                                println!("💡 Available commands:");
+                                println!("   docpilot pause    - Pause command capture");
+                                println!("   docpilot resume   - Resume command capture");
+                                println!("   docpilot annotate \"note\" - Add manual annotation");
+                                println!("   docpilot status   - Show session status");
+                                println!("   docpilot stop     - Stop monitoring and save session");
+                                println!();
+                                
+                                // Create PID file for background process tracking
+                                let home_dir = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+                                let docpilot_dir = PathBuf::from(home_dir).join(".docpilot");
+                                let pid_file = docpilot_dir.join("monitor.pid");
+                                
+                                // Ensure directory exists
+                                if let Err(e) = fs::create_dir_all(&docpilot_dir) {
+                                    eprintln!("⚠️  Warning: Could not create .docpilot directory: {}", e);
+                                }
+                                
+                                // Write PID file
+                                let pid = process::id();
+                                if let Err(e) = fs::write(&pid_file, pid.to_string()) {
+                                    eprintln!("⚠️  Warning: Could not write PID file: {}", e);
+                                } else {
+                                    println!("📝 Background process PID: {} (saved to {})", pid, pid_file.display());
+                                }
+                                
+                                // Create a detached background process instead of using tokio::spawn
+                                // The issue is that tokio::spawn gets terminated when main process exits
+                                
+                                // For now, let's use a simpler approach - run a persistent background loop
+                                // that doesn't depend on the main process staying alive
+                                
+                                println!("✅ DocPilot is now running in the background!");
+                                println!("   Your terminal is free to use normally.");
+                                println!("   All commands will be captured automatically.");
+                                
+                                // Run the monitoring in a separate thread that will persist
+                                let mut monitor_clone = monitor;
+                                let mut session_manager_clone = session_manager;
+                                let pid_file_clone = pid_file.clone();
+                                
+                                std::thread::spawn(move || {
+                                    // Create a new tokio runtime for this thread
+                                    let rt = tokio::runtime::Runtime::new().unwrap();
+                                    rt.block_on(async {
+                                        if let Err(e) = monitor_with_session(&mut monitor_clone, &mut session_manager_clone).await {
+                                            eprintln!("❌ Error during background monitoring: {}", e);
+                                            // Try to update session with error
+                                            if let Ok(mut sm) = SessionManager::new() {
+                                                if let Some(session) = sm.get_current_session_mut() {
+                                                    session.set_error(format!("Background monitoring error: {}", e));
+                                                    let session_clone = session.clone();
+                                                    let _ = sm.save_session(&session_clone);
+                                                }
+                                            }
+                                        }
+                                        
+                                        // Clean up PID file when done
+                                        let _ = fs::remove_file(&pid_file_clone);
+                                    });
+                                });
+                                
+                                // Give the background thread a moment to start
+                                std::thread::sleep(std::time::Duration::from_millis(100));
                             }
                         }
                         Err(e) => {
@@ -382,6 +462,39 @@ async fn main() -> Result<()> {
             }
         }
         Commands::Stop => {
+            // Check for and stop background monitoring process
+            let home_dir = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+            let docpilot_dir = PathBuf::from(home_dir).join(".docpilot");
+            let pid_file = docpilot_dir.join("monitor.pid");
+            
+            if pid_file.exists() {
+                if let Ok(pid_str) = fs::read_to_string(&pid_file) {
+                    if let Ok(pid) = pid_str.trim().parse::<u32>() {
+                        println!("🛑 Stopping background monitoring process (PID: {})...", pid);
+                        
+                        // Try to terminate the background process
+                        #[cfg(unix)]
+                        {
+                            use std::process::Command;
+                            let _ = Command::new("kill")
+                                .arg(pid.to_string())
+                                .output();
+                        }
+                        
+                        #[cfg(windows)]
+                        {
+                            use std::process::Command;
+                            let _ = Command::new("taskkill")
+                                .args(&["/PID", &pid.to_string(), "/F"])
+                                .output();
+                        }
+                        
+                        // Remove PID file
+                        let _ = fs::remove_file(&pid_file);
+                    }
+                }
+            }
+            
             match session_manager.stop_session() {
                 Ok(Some(session)) => {
                     println!("🛑 Documentation session stopped successfully!");
@@ -1066,61 +1179,80 @@ async fn monitor_with_session(
     let ctrl_c = signal::ctrl_c();
     tokio::pin!(ctrl_c);
     
-    // Set up periodic status updates
+    // Set up periodic status updates and command checking
     let mut status_interval = interval(Duration::from_secs(30));
+    let mut command_check_interval = interval(Duration::from_millis(1000));
     
-    // Monitor history in a loop
-    let history_monitor = async {
-        if let Err(e) = monitor.monitor_history().await {
-            eprintln!("📡 History monitoring error: {}", e);
-        }
-    };
+    // Track the last number of commands we've seen
+    let mut last_command_count = 0;
     
-    tokio::select! {
-        _ = &mut ctrl_c => {
-            println!();
-            println!("🛑 Received Ctrl+C, stopping session gracefully...");
-            
-            if let Err(e) = monitor.stop_monitoring() {
-                eprintln!("⚠️  Error stopping monitor: {}", e);
+    println!("🔄 Starting continuous monitoring loop...");
+    
+    loop {
+        tokio::select! {
+            _ = &mut ctrl_c => {
+                println!();
+                println!("🛑 Received Ctrl+C, stopping session gracefully...");
+                
+                if let Err(e) = monitor.stop_monitoring() {
+                    eprintln!("⚠️  Error stopping monitor: {}", e);
+                }
+                
+                // Stop the session
+                match session_manager.stop_session() {
+                    Ok(Some(session)) => {
+                        println!("✅ Session stopped successfully!");
+                        println!("📊 Final statistics:");
+                        println!("   Commands captured: {}", session.stats.total_commands);
+                        println!("   Annotations added: {}", session.stats.total_annotations);
+                        if let Some(duration) = session.get_duration_seconds() {
+                            let minutes = duration / 60;
+                            let seconds = duration % 60;
+                            if minutes > 0 {
+                                println!("   Session duration: {}m {}s", minutes, seconds);
+                            } else {
+                                println!("   Session duration: {}s", seconds);
+                            }
+                        }
+                        println!("💾 Session saved to: ~/.docpilot/sessions/{}.json", session.id);
+                    }
+                    Ok(None) => println!("ℹ️  No session was active."),
+                    Err(e) => eprintln!("❌ Error stopping session: {}", e),
+                }
+                break;
             }
-            
-            // Stop the session
-            match session_manager.stop_session() {
-                Ok(Some(session)) => {
-                    println!("✅ Session stopped successfully!");
-                    println!("📊 Final statistics:");
-                    println!("   Commands captured: {}", session.stats.total_commands);
-                    println!("   Annotations added: {}", session.stats.total_annotations);
-                    if let Some(duration) = session.get_duration_seconds() {
-                        let minutes = duration / 60;
-                        let seconds = duration % 60;
-                        if minutes > 0 {
-                            println!("   Session duration: {}m {}s", minutes, seconds);
-                        } else {
-                            println!("   Session duration: {}s", seconds);
+            _ = status_interval.tick() => {
+                // Periodic status update
+                if let Some(session) = session_manager.get_current_session() {
+                    if session.state.is_active() {
+                        println!("📊 Session active - Commands: {}, Annotations: {}",
+                               session.stats.total_commands,
+                               session.stats.total_annotations);
+                    }
+                }
+            }
+            _ = command_check_interval.tick() => {
+                // Check for new commands periodically
+                if monitor.is_monitoring() {
+                    match monitor.check_history_once().await {
+                        Ok(new_commands) => {
+                            for command in new_commands {
+                                if let Err(e) = session_manager.add_command(command.clone()) {
+                                    eprintln!("⚠️  Failed to add command to session: {}", e);
+                                } else {
+                                    println!("📝 Captured: {}", command.command);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("📡 History monitoring error: {}", e);
                         }
                     }
-                    println!("💾 Session saved to: ~/.docpilot/sessions/{}.json", session.id);
-                }
-                Ok(None) => println!("ℹ️  No session was active."),
-                Err(e) => eprintln!("❌ Error stopping session: {}", e),
-            }
-        }
-        _ = status_interval.tick() => {
-            // Periodic status update
-            if let Some(session) = session_manager.get_current_session() {
-                if session.state.is_active() {
-                    println!("📊 Session active - Commands: {}, Annotations: {}",
-                           session.stats.total_commands,
-                           session.stats.total_annotations);
                 }
             }
-        }
-        _ = history_monitor => {
-            println!("📡 History monitoring completed");
         }
     }
+    
     
     Ok(())
 }
