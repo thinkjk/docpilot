@@ -514,6 +514,11 @@ impl SessionManager {
         self.current_session.as_mut()
     }
 
+    /// Set the current session (used for recovery and background processes)
+    pub fn set_current_session(&mut self, session: Session) {
+        self.current_session = Some(session);
+    }
+
     /// Load a session by ID
     pub fn load_session(&mut self, session_id: &str) -> Result<Session> {
         // Check cache first

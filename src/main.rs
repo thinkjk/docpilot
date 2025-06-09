@@ -1,6 +1,5 @@
 use clap::{Parser, Subcommand};
 use anyhow::Result;
-use std::process;
 use std::fs;
 use std::path::PathBuf;
 
@@ -270,6 +269,13 @@ EXAMPLES:
     docpilot status
     docpilot info")]
     Status,
+    
+    /// Hidden command for background monitoring
+    #[command(hide = true)]
+    BackgroundMonitor {
+        /// Session ID to monitor
+        session_id: String,
+    },
 }
 
 #[tokio::main]
@@ -397,31 +403,56 @@ async fn main() -> Result<()> {
                                     eprintln!("⚠️  Warning: Could not create .docpilot directory: {}", e);
                                 }
                                 
-                                // Write PID file
-                                let pid = process::id();
-                                if let Err(e) = fs::write(&pid_file, pid.to_string()) {
-                                    eprintln!("⚠️  Warning: Could not write PID file: {}", e);
-                                } else {
-                                    println!("📝 Background process PID: {} (saved to {})", pid, pid_file.display());
-                                }
-                                
                                 println!("✅ DocPilot is now running in the background!");
                                 println!("   Your terminal is free to use normally.");
                                 println!("   All commands will be captured automatically.");
                                 
-                                // Run the monitoring directly in the main process
-                                // This ensures the background monitoring continues running
-                                if let Err(e) = monitor_with_session(&mut monitor, &mut session_manager).await {
-                                    eprintln!("❌ Error during background monitoring: {}", e);
-                                    if let Some(session) = session_manager.get_current_session_mut() {
-                                        session.set_error(format!("Background monitoring error: {}", e));
-                                        let session_clone = session.clone();
-                                        let _ = session_manager.save_session(&session_clone);
+                                // Fork the process to run in background
+                                #[cfg(unix)]
+                                {
+                                    use std::process::Command;
+                                    
+                                    // Spawn a new background process
+                                    let mut cmd = Command::new(std::env::current_exe().unwrap_or_else(|_| "docpilot".into()));
+                                    cmd.arg("background-monitor")
+                                        .arg(&session_id)
+                                        .stdin(std::process::Stdio::null())
+                                        .stdout(std::process::Stdio::null())
+                                        .stderr(std::process::Stdio::null());
+                                    
+                                    match cmd.spawn() {
+                                        Ok(child) => {
+                                            let pid = child.id();
+                                            if let Err(e) = fs::write(&pid_file, pid.to_string()) {
+                                                eprintln!("⚠️  Warning: Could not write PID file: {}", e);
+                                            } else {
+                                                println!("📝 Background process PID: {} (saved to {})", pid, pid_file.display());
+                                            }
+                                        }
+                                        Err(e) => {
+                                            eprintln!("❌ Failed to start background process: {}", e);
+                                            eprintln!("   Falling back to foreground mode");
+                                            if let Err(e) = monitor_with_session(&mut monitor, &mut session_manager).await {
+                                                eprintln!("❌ Error during monitoring: {}", e);
+                                            }
+                                        }
                                     }
                                 }
                                 
-                                // Clean up PID file when done
-                                let _ = fs::remove_file(&pid_file);
+                                #[cfg(not(unix))]
+                                {
+                                    // On non-Unix systems, fall back to foreground mode
+                                    eprintln!("⚠️  Background mode not supported on this platform");
+                                    eprintln!("   Running in foreground mode instead");
+                                    let pid = process::id();
+                                    if let Err(e) = fs::write(&pid_file, pid.to_string()) {
+                                        eprintln!("⚠️  Warning: Could not write PID file: {}", e);
+                                    }
+                                    if let Err(e) = monitor_with_session(&mut monitor, &mut session_manager).await {
+                                        eprintln!("❌ Error during monitoring: {}", e);
+                                    }
+                                    let _ = fs::remove_file(&pid_file);
+                                }
                             }
                         }
                         Err(e) => {
@@ -1090,6 +1121,25 @@ async fn main() -> Result<()> {
                         }
                     }
                     Err(e) => eprintln!("Failed to list sessions: {}", e),
+                }
+            }
+        }
+        Commands::BackgroundMonitor { session_id } => {
+            // This is the hidden command used for background monitoring
+            let mut session_manager = SessionManager::new()?;
+            
+            // Load the session and set it as current by starting a new session with the same data
+            if let Ok(session) = session_manager.load_session(&session_id) {
+                // We need to manually set the current session since there's no public method
+                // This is a bit of a hack, but it works for the background process
+                session_manager.set_current_session(session);
+                
+                // Create and start terminal monitor
+                if let Ok(mut monitor) = TerminalMonitor::new(session_id.clone()) {
+                    if monitor.start_monitoring().is_ok() {
+                        // Run the monitoring loop
+                        let _ = monitor_with_session(&mut monitor, &mut session_manager).await;
+                    }
                 }
             }
         }
