@@ -78,16 +78,18 @@ cargo install docpilot
 
 ```bash
 # Set up Claude (recommended)
-docpilot config set-provider claude
-docpilot config set-api-key your-claude-api-key
+docpilot config --provider claude --api-key your-claude-api-key
 
 # Or use OpenAI
-docpilot config set-provider openai
-docpilot config set-api-key your-openai-api-key
+docpilot config --provider openai --api-key your-openai-api-key
 
-# Or use local Ollama
-docpilot config set-provider ollama
-docpilot config set-base-url http://localhost:11434
+# Or use local Ollama (no API key required)
+docpilot config --provider ollama --base-url http://localhost:11434
+
+# You can also set them separately
+docpilot config --provider claude
+docpilot config --api-key your-claude-api-key
+docpilot config --base-url http://localhost:11434  # For current provider
 ```
 
 2. **Test the installation**:
@@ -151,16 +153,14 @@ docpilot import backup.json
 #### Customization
 
 ```bash
-# Configure privacy filtering
-docpilot config set-privacy-mode strict  # strict|moderate|lenient
+# View current configuration
+docpilot config
 
-# Enable/disable features
-docpilot config set-validation true
-docpilot config set-deduplication true
-docpilot config set-ai-analysis true
+# Set LLM provider and API key
+docpilot config --provider claude --api-key your-api-key
 
-# Customize output format
-docpilot generate --template comprehensive --theme dark
+# Note: Advanced configuration options like privacy filtering,
+# validation, and deduplication will be available in future versions
 ```
 
 #### Filtering and Validation
@@ -172,35 +172,40 @@ docpilot generate --exclude-failed --only-successful
 # Include workflow optimizations
 docpilot generate --include-optimizations
 
-# Custom sensitive patterns
-docpilot config add-sensitive-pattern "secret-.*"
+# Note: Advanced filtering options will be available in future versions
 ```
 
 ## 🔧 Configuration
 
-DocPilot stores configuration in `~/.config/docpilot/config.json`. You can edit this file directly or use the CLI:
+DocPilot stores configuration in `~/.docpilot/config.json`. You can edit this file directly or use the CLI:
 
 ```bash
 # View current configuration
-docpilot config show
+docpilot config
 
-# Set configuration values
-docpilot config set-key value
+# Set LLM provider and API key
+docpilot config --provider claude --api-key your-api-key
 
-# Reset to defaults
-docpilot config reset
+# Set provider only
+docpilot config --provider claude
+
+# Set API key for current provider
+docpilot config --api-key your-api-key
+
+# Set base URL for current provider (useful for Ollama)
+docpilot config --base-url http://localhost:11434
+
+# Set Ollama with custom URL (no API key needed)
+docpilot config --provider ollama --base-url http://localhost:11434
 ```
 
 ### Configuration Options
 
-| Option                 | Description                                         | Default    |
-| ---------------------- | --------------------------------------------------- | ---------- |
-| `llm_provider`         | AI provider (claude, openai, gemini, ollama)        | `claude`   |
-| `privacy_mode`         | Privacy filtering level (strict, moderate, lenient) | `moderate` |
-| `enable_validation`    | Command sequence validation                         | `true`     |
-| `enable_deduplication` | Remove duplicate commands                           | `true`     |
-| `auto_save_interval`   | Auto-save interval in seconds                       | `300`      |
-| `max_session_duration` | Maximum session duration in hours                   | `24`       |
+| Option         | Description                                   | Default |
+| -------------- | --------------------------------------------- | ------- |
+| `llm_provider` | AI provider (claude, chatgpt, gemini, ollama) | None    |
+| `api_keys`     | API keys for configured providers             | None    |
+| `base_urls`    | Base URLs for providers (e.g., Ollama)        | None    |
 
 ## 📚 Examples
 

@@ -61,7 +61,7 @@ EXAMPLES:
     docpilot begin \"API testing workflow\" -o api-tests.md")]
     Start {
         /// Brief description of what you're documenting
-        #[arg(short, long, help = "Describe what workflow you're documenting")]
+        #[arg(help = "Describe what workflow you're documenting")]
         description: String,
         
         /// Output file name (optional, defaults to generated name)
@@ -211,7 +211,8 @@ Set up API keys and providers for AI-powered command analysis, explanations, and
 EXAMPLES:
     docpilot config                                    # Show current configuration
     docpilot cfg --provider claude --api-key sk-...   # Set Claude as provider
-    docpilot setup -p chatgpt -a your-api-key         # Set ChatGPT as provider")]
+    docpilot setup -p chatgpt -a your-api-key         # Set ChatGPT as provider
+    docpilot config --provider ollama --base-url http://localhost:11434  # Set Ollama")]
     Config {
         /// LLM provider (claude, chatgpt, gemini, ollama)
         #[arg(short, long, help = "AI provider: claude, chatgpt, gemini, ollama")]
@@ -220,9 +221,37 @@ EXAMPLES:
         /// API key for the LLM provider
         #[arg(short, long, help = "API key for the selected provider")]
         api_key: Option<String>,
+        
+        /// Base URL for the LLM provider (useful for Ollama or custom endpoints)
+        #[arg(short, long, help = "Base URL for the provider (e.g., http://localhost:11434 for Ollama)")]
+        base_url: Option<String>,
     },
     
-    /// 📊 Show current session status
+    /// 📄 Generate documentation from a session
+    #[command(alias = "gen", alias = "doc")]
+    #[command(long_about = "Generate markdown documentation from a completed session.
+    
+This command creates comprehensive documentation from captured commands and annotations. You can specify an output file or let DocPilot generate one automatically.
+
+EXAMPLES:
+    docpilot generate --output my-guide.md          # Generate from current/last session
+    docpilot gen --session session-id -o guide.md  # Generate from specific session
+    docpilot doc --template comprehensive           # Use specific template")]
+    Generate {
+        /// Output file name for the generated documentation
+        #[arg(short, long, help = "Output markdown file (e.g., guide.md)")]
+        output: Option<String>,
+        
+        /// Specific session ID to generate from (defaults to current/last session)
+        #[arg(short, long, help = "Session ID to generate documentation from")]
+        session: Option<String>,
+        
+        /// Template style for documentation
+        #[arg(short, long, default_value = "standard", help = "Template: standard, comprehensive, minimal")]
+        template: String,
+    },
+    
+    /// � Show current session status
     #[command(alias = "info", alias = "stat")]
     #[command(long_about = "Display detailed information about the current session.
     
@@ -619,7 +648,7 @@ async fn main() -> Result<()> {
         Commands::Milestone { text } => {
             handle_quick_annotation(&mut session_manager, text, AnnotationType::Milestone, "🎯", "Milestone").await;
         }
-        Commands::Config { provider, api_key } => {
+        Commands::Config { provider, api_key, base_url } => {
             let mut config = match LlmConfig::load() {
                 Ok(c) => c,
                 Err(e) => {
@@ -628,8 +657,30 @@ async fn main() -> Result<()> {
                 }
             };
 
-            match (&provider, &api_key) {
-                (Some(p), Some(key)) => {
+            match (&provider, &api_key, &base_url) {
+                (Some(p), Some(key), Some(url)) => {
+                    // Set provider, API key, and base URL
+                    match LlmProvider::from_str(p) {
+                        Ok(_) => {
+                            if let Err(e) = config.set_api_key(p, key.clone()) {
+                                eprintln!("Failed to set API key: {}", e);
+                                return Ok(());
+                            }
+                            config.set_base_url(p, url.clone());
+                            if let Err(e) = config.set_default_provider(p.clone()) {
+                                eprintln!("Failed to set default provider: {}", e);
+                                return Ok(());
+                            }
+                            if let Err(e) = config.save() {
+                                eprintln!("Failed to save configuration: {}", e);
+                                return Ok(());
+                            }
+                            println!("Set {} as default provider with API key and base URL {}", p, url);
+                        }
+                        Err(e) => eprintln!("Invalid provider: {}", e),
+                    }
+                }
+                (Some(p), Some(key), None) => {
                     // Set both provider and API key
                     match LlmProvider::from_str(p) {
                         Ok(_) => {
@@ -650,7 +701,25 @@ async fn main() -> Result<()> {
                         Err(e) => eprintln!("Invalid provider: {}", e),
                     }
                 }
-                (Some(p), None) => {
+                (Some(p), None, Some(url)) => {
+                    // Set provider and base URL only (useful for Ollama)
+                    match LlmProvider::from_str(p) {
+                        Ok(_) => {
+                            config.set_base_url(p, url.clone());
+                            if let Err(e) = config.set_default_provider(p.clone()) {
+                                eprintln!("Failed to set default provider: {}", e);
+                                return Ok(());
+                            }
+                            if let Err(e) = config.save() {
+                                eprintln!("Failed to save configuration: {}", e);
+                                return Ok(());
+                            }
+                            println!("Set {} as default provider with base URL {}", p, url);
+                        }
+                        Err(e) => eprintln!("Invalid provider: {}", e),
+                    }
+                }
+                (Some(p), None, None) => {
                     // Set default provider only
                     match config.set_default_provider(p.clone()) {
                         Ok(_) => {
@@ -663,7 +732,7 @@ async fn main() -> Result<()> {
                         Err(e) => eprintln!("Failed to set provider: {}", e),
                     }
                 }
-                (None, Some(key)) => {
+                (None, Some(key), None) => {
                     // Set API key for default provider
                     if let Some(default_provider) = config.get_default_provider().map(|s| s.to_string()) {
                         if let Err(e) = config.set_api_key(&default_provider, key.clone()) {
@@ -679,7 +748,37 @@ async fn main() -> Result<()> {
                         eprintln!("No default provider set. Please specify a provider with --provider");
                     }
                 }
-                (None, None) => {
+                (None, None, Some(url)) => {
+                    // Set base URL for default provider
+                    if let Some(default_provider) = config.get_default_provider().map(|s| s.to_string()) {
+                        config.set_base_url(&default_provider, url.clone());
+                        if let Err(e) = config.save() {
+                            eprintln!("Failed to save configuration: {}", e);
+                            return Ok(());
+                        }
+                        println!("Updated base URL for {} to {}", default_provider, url);
+                    } else {
+                        eprintln!("No default provider set. Please specify a provider with --provider");
+                    }
+                }
+                (None, Some(key), Some(url)) => {
+                    // Set API key and base URL for default provider
+                    if let Some(default_provider) = config.get_default_provider().map(|s| s.to_string()) {
+                        if let Err(e) = config.set_api_key(&default_provider, key.clone()) {
+                            eprintln!("Failed to set API key: {}", e);
+                            return Ok(());
+                        }
+                        config.set_base_url(&default_provider, url.clone());
+                        if let Err(e) = config.save() {
+                            eprintln!("Failed to save configuration: {}", e);
+                            return Ok(());
+                        }
+                        println!("Updated API key and base URL for {} to {}", default_provider, url);
+                    } else {
+                        eprintln!("No default provider set. Please specify a provider with --provider");
+                    }
+                }
+                (None, None, None) => {
                     // Show current configuration
                     println!("Current LLM Configuration:");
                     println!("========================");
@@ -698,10 +797,17 @@ async fn main() -> Result<()> {
                         for provider in providers {
                             let has_key = config.get_api_key(provider).map_or(false, |k| !k.is_empty());
                             let model = config.get_model(provider).unwrap_or("default");
-                            println!("  {} - API Key: {} - Model: {}",
+                            let base_url = config.get_base_url(provider);
+                            
+                            print!("  {} - API Key: {} - Model: {}",
                                    provider,
                                    if has_key { "✓" } else { "✗" },
                                    model);
+                            
+                            if let Some(url) = base_url {
+                                print!(" - Base URL: {}", url);
+                            }
+                            println!();
                         }
                     }
                     
@@ -717,6 +823,94 @@ async fn main() -> Result<()> {
                         }
                         Err(e) => eprintln!("Configuration validation failed: {}", e),
                     }
+                }
+            }
+        }
+        Commands::Generate { output, session, template } => {
+            // Handle the generate command
+            let session_to_use = if let Some(session_id) = session {
+                // Load specific session
+                match session_manager.load_session(&session_id) {
+                    Ok(session) => Some(session),
+                    Err(e) => {
+                        eprintln!("❌ Failed to load session '{}': {}", session_id, e);
+                        eprintln!("   Use 'docpilot status' to see available sessions");
+                        return Ok(());
+                    }
+                }
+            } else {
+                // Use current session or most recent completed session
+                session_manager.get_current_session().cloned()
+                    .or_else(|| {
+                        // Try to get the most recent completed session
+                        session_manager.list_sessions()
+                            .ok()
+                            .and_then(|sessions| sessions.first().cloned())
+                            .and_then(|session_id| session_manager.load_session(&session_id).ok())
+                    })
+            };
+
+            let session = match session_to_use {
+                Some(s) => s,
+                None => {
+                    eprintln!("❌ No session found to generate documentation from");
+                    eprintln!("   Start a session with 'docpilot start \"description\"'");
+                    eprintln!("   Or specify a session ID with --session");
+                    return Ok(());
+                }
+            };
+
+            // Determine output file
+            let output_file = if let Some(output_path) = output {
+                std::path::PathBuf::from(output_path)
+            } else if let Some(ref session_output) = session.output_file {
+                session_output.clone()
+            } else {
+                // Generate a default filename based on session description
+                let sanitized_desc = session.description
+                    .chars()
+                    .map(|c| if c.is_alphanumeric() || c == ' ' { c } else { ' ' })
+                    .collect::<String>()
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join("-")
+                    .to_lowercase();
+                std::path::PathBuf::from(format!("{}.md", sanitized_desc))
+            };
+
+            println!("📄 Generating documentation from session: {}", session.description);
+            println!("   Session ID: {}", session.id);
+            println!("   Template: {}", template);
+            println!("   Output file: {}", output_file.display());
+            println!();
+
+            // Generate the documentation using the output module
+            match crate::output::generate_documentation(&session, &output_file, &template).await {
+                Ok(_) => {
+                    println!("✅ Documentation generated successfully!");
+                    println!("📊 Session Statistics:");
+                    println!("   Commands captured: {}", session.stats.total_commands);
+                    println!("   Annotations added: {}", session.stats.total_annotations);
+                    if let Some(duration) = session.get_duration_seconds() {
+                        let hours = duration / 3600;
+                        let minutes = (duration % 3600) / 60;
+                        let seconds = duration % 60;
+                        if hours > 0 {
+                            println!("   Session duration: {}h {}m {}s", hours, minutes, seconds);
+                        } else if minutes > 0 {
+                            println!("   Session duration: {}m {}s", minutes, seconds);
+                        } else {
+                            println!("   Session duration: {}s", seconds);
+                        }
+                    }
+                    println!();
+                    println!("📄 Documentation saved to: {}", output_file.display());
+                    println!("💡 You can now view, edit, or share your documentation!");
+                }
+                Err(e) => {
+                    eprintln!("❌ Failed to generate documentation: {}", e);
+                    eprintln!("   Please check the session data and try again");
+                    eprintln!("   Use 'docpilot status' to verify session details");
                 }
             }
         }
