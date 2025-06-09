@@ -279,32 +279,114 @@ netstat -an | grep :80
 
 ## 🏗️ Architecture
 
-DocPilot is built with a modular architecture:
+DocPilot is built with a modular architecture designed for extensibility and maintainability:
 
 ```
-src/
-├── main.rs              # CLI entry point
-├── terminal/            # Terminal monitoring
-│   ├── monitor.rs       # Command capture
-│   └── platform.rs      # Cross-platform support
-├── llm/                 # AI integration
-│   ├── client.rs        # LLM client abstraction
-│   ├── analyzer.rs      # AI analysis engine
-│   └── prompt.rs        # Prompt engineering
-├── session/             # Session management
-│   └── manager.rs       # Session lifecycle
-├── filter/              # Command filtering
-│   └── command.rs       # Filtering and validation
-└── output/              # Documentation generation
-    ├── markdown.rs      # Markdown templates
-    └── codeblock.rs     # Code formatting
+docpilot/
+├── src/                           # Core application source
+│   ├── main.rs                    # CLI entry point and command routing
+│   ├── terminal/                  # Terminal monitoring and command capture
+│   │   ├── mod.rs                 # Module exports and platform detection
+│   │   ├── monitor.rs             # Real-time command monitoring
+│   │   ├── monitor.test.rs        # Terminal monitoring tests
+│   │   └── platform.rs            # Cross-platform shell integration
+│   ├── llm/                       # AI integration and analysis
+│   │   ├── mod.rs                 # LLM module exports
+│   │   ├── client.rs              # Multi-provider LLM client
+│   │   ├── config.rs              # LLM configuration management
+│   │   ├── analyzer.rs            # AI-powered command analysis
+│   │   ├── prompt.rs              # Prompt engineering and templates
+│   │   ├── error_handler.rs       # LLM error handling and retry logic
+│   │   └── integration_tests.rs   # LLM integration testing
+│   ├── session/                   # Session lifecycle management
+│   │   ├── mod.rs                 # Session module exports
+│   │   ├── manager.rs             # Session state and persistence
+│   │   └── manager.test.rs        # Session management tests
+│   ├── filter/                    # Command filtering and validation
+│   │   ├── mod.rs                 # Filter module exports
+│   │   ├── command.rs             # Privacy filtering and validation
+│   │   └── command.test.rs        # Command filtering tests
+│   └── output/                    # Documentation generation
+│       ├── mod.rs                 # Output module exports
+│       ├── markdown.rs            # Markdown template engine
+│       ├── markdown.test.rs       # Markdown generation tests
+│       ├── codeblock.rs           # Code block formatting
+│       └── markdown_formatting_demo.test.rs # Formatting demos
+├── tests/                         # Integration and E2E tests
+│   └── e2e_usability_test.rs      # Comprehensive end-to-end tests
+├── scripts/                       # Build and test automation
+│   └── run_e2e_tests.sh           # E2E test runner script
+├── docs/                          # Project documentation
+│   ├── makefile-guide.md          # Comprehensive Makefile documentation
+│   ├── e2e-testing-guide.md       # End-to-end testing guide
+│   ├── cli-documentation.md       # CLI command reference
+│   ├── ai-integration-implementation.md # AI integration details
+│   └── session-persistence-recovery.md # Session management docs
+├── Makefile                       # Development workflow automation
+├── Cargo.toml                     # Rust project configuration
+└── README.md                      # Project overview and quick start
 ```
+
+### Core Components
+
+#### 🖥️ **Terminal Module** (`src/terminal/`)
+
+- **Cross-platform monitoring** for Linux, macOS, and Windows
+- **Multi-shell support** (Bash, Zsh, Fish, PowerShell)
+- **Real-time command capture** with background processing
+- **Platform-specific optimizations** for different operating systems
+
+#### 🤖 **LLM Module** (`src/llm/`)
+
+- **Multi-provider support** (Claude, ChatGPT, Gemini, Ollama)
+- **Intelligent analysis** with context-aware prompts
+- **Error handling** with retry logic and rate limiting
+- **Configurable AI features** with provider-specific optimizations
+
+#### 📊 **Session Module** (`src/session/`)
+
+- **Persistent session storage** with JSON serialization
+- **State management** (Active, Paused, Stopped, Error)
+- **Annotation system** with multiple types (Note, Warning, Milestone, Explanation)
+- **Session recovery** and backup functionality
+
+#### 🔍 **Filter Module** (`src/filter/`)
+
+- **Privacy protection** with sensitive data redaction
+- **Command validation** and sequence dependency checking
+- **Workflow optimization** suggestions and analysis
+- **Typo detection** and suspicious command filtering
+
+#### 📝 **Output Module** (`src/output/`)
+
+- **8 documentation templates** (Standard, Minimal, Comprehensive, etc.)
+- **Markdown generation** with syntax highlighting
+- **Code block formatting** with language detection
+- **Hierarchical organization** by workflow phases
+
+### Testing Architecture
+
+#### � **Comprehensive Test Coverage**
+
+- **Unit Tests** (180+): Individual component validation
+- **Integration Tests** (50+): Cross-component functionality
+- **End-to-End Tests** (7 suites): Complete workflow validation
+- **Performance Tests**: Stress testing with rapid operations
+
+#### 🚀 **Automated E2E Testing**
+
+- **No manual input required** - fully automated test execution
+- **Complete functionality coverage** - tests all user-facing features
+- **Cross-platform validation** - ensures compatibility across systems
+- **Regression prevention** - catches breaking changes early
 
 ## 🧪 Testing
 
 DocPilot has comprehensive test coverage with 258+ tests across multiple categories:
 
 ### Quick Testing with Makefile
+
+DocPilot includes a comprehensive Makefile that simplifies common development tasks. For detailed documentation, see the [Makefile Guide](docs/makefile-guide.md).
 
 ```bash
 # Run all tests (recommended)
@@ -391,106 +473,6 @@ cargo test
 RUST_LOG=debug cargo run -- start "test session"
 ```
 
-### Using the Makefile
-
-DocPilot includes a comprehensive Makefile that simplifies common development tasks. For detailed documentation, see the [Makefile Guide](docs/makefile-guide.md).
-
-Here are the most commonly used targets:
-
-#### 🔨 **Build Commands**
-
-```bash
-make build          # Build in release mode (optimized)
-make build-debug    # Build in debug mode (faster compilation)
-make install        # Build and install DocPilot to your system
-make verify         # Quick verification that DocPilot is working
-```
-
-#### 🧪 **Testing Commands**
-
-```bash
-make test           # Run all tests (unit + integration)
-make test-unit      # Run unit tests only
-make test-integration # Run integration tests only
-make test-e2e       # Run comprehensive end-to-end tests
-make run-e2e-tests  # Alternative E2E test runner using Rust
-```
-
-#### 🚀 **End-to-End Testing**
-
-The E2E tests are particularly powerful - they automatically test all DocPilot functionality without requiring manual input:
-
-```bash
-make test-e2e       # Runs 7 comprehensive test suites:
-                    # • Complete Basic Workflow
-                    # • Configuration Management
-                    # • Session State Management
-                    # • Documentation Templates (all 8 templates)
-                    # • Error Handling & Edge Cases
-                    # • Help Documentation
-                    # • Performance Testing
-```
-
-#### 🛠️ **Development Commands**
-
-```bash
-make check          # Run cargo check and clippy linting
-make format         # Format code with rustfmt
-make dev            # Complete development workflow (format + check + test)
-make clean          # Clean build artifacts and test files
-```
-
-#### 📚 **Documentation & Analysis**
-
-```bash
-make docs           # Generate and open Rust documentation
-make stats          # Show project statistics (lines of code, tests, dependencies)
-make help           # Show all available Makefile targets
-make help-e2e       # Detailed guide for E2E testing
-```
-
-#### ⚡ **Performance & Quality**
-
-```bash
-make perf-test      # Run performance-focused tests
-make audit          # Security audit of dependencies
-make update         # Update all dependencies
-make ci             # Complete CI pipeline (check + test + e2e)
-```
-
-#### 🎯 **Quick Examples**
-
-```bash
-make run-example    # Run a complete example workflow demonstration
-                    # Shows: start → annotate → status → stop → generate
-```
-
-#### **Common Development Workflows**
-
-**Quick Development Cycle:**
-
-```bash
-make dev            # Format, check, and test everything
-```
-
-**Before Committing:**
-
-```bash
-make ci             # Run the full CI pipeline
-```
-
-**Testing New Features:**
-
-```bash
-make test-e2e       # Comprehensive end-to-end validation
-```
-
-**Performance Validation:**
-
-```bash
-make perf-test      # Stress test with multiple annotations
-```
-
 ### Code Style
 
 - Follow Rust standard formatting: `cargo fmt` or `make format`
@@ -525,6 +507,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ---
 
-**Made with ❤️ by the DocPilot team**
+**Made with ❤️ by Jason Kramer**
 
 _Transform your terminal commands into beautiful documentation effortlessly._
