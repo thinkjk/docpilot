@@ -1495,6 +1495,16 @@ impl MarkdownGenerator {
         self.template.get_config()
     }
 
+    /// Enable AI analysis with the provided LLM configuration
+    pub fn enable_ai_analysis(&mut self, llm_config: crate::llm::LlmConfig) {
+        // Update the AI analysis config to enable AI features
+        let mut config = self.template.get_config().clone();
+        config.ai_analysis_config.enable_ai_explanations = true;
+        
+        // Create a new template with AI analyzer
+        self.template = MarkdownTemplate::with_config(config).with_ai_analyzer(llm_config);
+    }
+
     /// Create a minimal configuration for quick documentation
     pub fn minimal_config() -> MarkdownConfig {
         MarkdownConfig {

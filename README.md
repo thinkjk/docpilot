@@ -48,6 +48,25 @@ DocPilot automatically captures your terminal commands and generates comprehensi
 
 ## 🚀 Quick Start
 
+### For Developers (Using Makefile)
+
+If you're contributing to DocPilot or want to build from source:
+
+```bash
+# Clone and build
+git clone https://github.com/yourusername/docpilot.git
+cd docpilot
+make build          # Build optimized release version
+make install        # Install to system
+
+# Run comprehensive tests
+make test-e2e       # Automated end-to-end testing (recommended)
+make ci             # Full CI pipeline
+
+# Quick development cycle
+make dev            # Format + check + test
+```
+
 ### Prerequisites
 
 - **Rust 1.70+** - [Install Rust](https://rustup.rs/)
@@ -283,7 +302,29 @@ src/
 
 ## 🧪 Testing
 
-DocPilot has comprehensive test coverage with 258 tests:
+DocPilot has comprehensive test coverage with 258+ tests across multiple categories:
+
+### Quick Testing with Makefile
+
+```bash
+# Run all tests (recommended)
+make test           # Unit + integration tests
+
+# Run comprehensive end-to-end tests
+make test-e2e       # 7 automated test suites, no manual input required
+
+# Run specific test categories
+make test-unit      # Unit tests only
+make test-integration # Integration tests only
+
+# Performance and stress testing
+make perf-test      # Performance validation with stress testing
+
+# Complete CI pipeline
+make ci             # check + test + test-e2e (full validation)
+```
+
+### Advanced Testing with Cargo
 
 ```bash
 # Run all tests
@@ -296,15 +337,38 @@ cargo test session::manager
 
 # Run with coverage
 cargo test --all-features
+
+# Run E2E tests directly
+cargo test --test e2e_usability_test
 ```
+
+### End-to-End Test Suites
+
+The E2E tests (`make test-e2e`) automatically validate all functionality:
+
+1. **Complete Basic Workflow** - Full user journey from start to finish
+2. **Configuration Management** - LLM provider setup and configuration
+3. **Session State Management** - Session lifecycle and state transitions
+4. **Documentation Templates** - All 8 available output templates
+5. **Error Handling** - Edge cases and error conditions
+6. **Help Documentation** - All help commands and documentation
+7. **Performance Testing** - Stress testing with 20+ rapid annotations
 
 ### Test Categories
 
-- **Unit Tests**: Individual component testing
-- **Integration Tests**: Cross-component functionality
-- **End-to-End Tests**: Complete workflow validation
-- **Privacy Tests**: Sensitive data filtering
-- **Validation Tests**: Command sequence validation
+- **Unit Tests** (180+): Individual component testing
+- **Integration Tests** (50+): Cross-component functionality
+- **End-to-End Tests** (7 suites): Complete workflow validation
+- **Privacy Tests** (15+): Sensitive data filtering
+- **Validation Tests** (13+): Command sequence validation
+
+### Testing Benefits
+
+✅ **No Manual Input Required** - All tests run automatically
+✅ **Complete Coverage** - Tests all user-facing functionality
+✅ **Cross-Platform** - Validates Linux and macOS compatibility
+✅ **Performance Validated** - Stress testing with rapid operations
+✅ **Regression Prevention** - Catches breaking changes early
 
 ## 🤝 Contributing
 
@@ -327,12 +391,113 @@ cargo test
 RUST_LOG=debug cargo run -- start "test session"
 ```
 
+### Using the Makefile
+
+DocPilot includes a comprehensive Makefile that simplifies common development tasks. For detailed documentation, see the [Makefile Guide](docs/makefile-guide.md).
+
+Here are the most commonly used targets:
+
+#### 🔨 **Build Commands**
+
+```bash
+make build          # Build in release mode (optimized)
+make build-debug    # Build in debug mode (faster compilation)
+make install        # Build and install DocPilot to your system
+make verify         # Quick verification that DocPilot is working
+```
+
+#### 🧪 **Testing Commands**
+
+```bash
+make test           # Run all tests (unit + integration)
+make test-unit      # Run unit tests only
+make test-integration # Run integration tests only
+make test-e2e       # Run comprehensive end-to-end tests
+make run-e2e-tests  # Alternative E2E test runner using Rust
+```
+
+#### 🚀 **End-to-End Testing**
+
+The E2E tests are particularly powerful - they automatically test all DocPilot functionality without requiring manual input:
+
+```bash
+make test-e2e       # Runs 7 comprehensive test suites:
+                    # • Complete Basic Workflow
+                    # • Configuration Management
+                    # • Session State Management
+                    # • Documentation Templates (all 8 templates)
+                    # • Error Handling & Edge Cases
+                    # • Help Documentation
+                    # • Performance Testing
+```
+
+#### 🛠️ **Development Commands**
+
+```bash
+make check          # Run cargo check and clippy linting
+make format         # Format code with rustfmt
+make dev            # Complete development workflow (format + check + test)
+make clean          # Clean build artifacts and test files
+```
+
+#### 📚 **Documentation & Analysis**
+
+```bash
+make docs           # Generate and open Rust documentation
+make stats          # Show project statistics (lines of code, tests, dependencies)
+make help           # Show all available Makefile targets
+make help-e2e       # Detailed guide for E2E testing
+```
+
+#### ⚡ **Performance & Quality**
+
+```bash
+make perf-test      # Run performance-focused tests
+make audit          # Security audit of dependencies
+make update         # Update all dependencies
+make ci             # Complete CI pipeline (check + test + e2e)
+```
+
+#### 🎯 **Quick Examples**
+
+```bash
+make run-example    # Run a complete example workflow demonstration
+                    # Shows: start → annotate → status → stop → generate
+```
+
+#### **Common Development Workflows**
+
+**Quick Development Cycle:**
+
+```bash
+make dev            # Format, check, and test everything
+```
+
+**Before Committing:**
+
+```bash
+make ci             # Run the full CI pipeline
+```
+
+**Testing New Features:**
+
+```bash
+make test-e2e       # Comprehensive end-to-end validation
+```
+
+**Performance Validation:**
+
+```bash
+make perf-test      # Stress test with multiple annotations
+```
+
 ### Code Style
 
-- Follow Rust standard formatting: `cargo fmt`
-- Ensure clippy compliance: `cargo clippy`
+- Follow Rust standard formatting: `cargo fmt` or `make format`
+- Ensure clippy compliance: `cargo clippy` or `make check`
 - Add tests for new features
 - Update documentation for API changes
+- Run `make ci` before submitting pull requests
 
 ## 📄 License
 

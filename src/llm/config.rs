@@ -321,6 +321,19 @@ impl LlmConfig {
 
         Ok(warnings)
     }
+
+    /// Check if the configuration has at least one properly configured provider
+    pub fn is_configured(&self) -> bool {
+        // Check if we have a default provider that's properly configured
+        if let Some(default_provider) = &self.default_provider {
+            if self.has_provider(default_provider) {
+                return true;
+            }
+        }
+        
+        // Check if any provider is configured with an API key
+        self.providers.iter().any(|(_, config)| !config.api_key.is_empty())
+    }
 }
 
 #[cfg(test)]
