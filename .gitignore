@@ -1,0 +1,55 @@
+# Rust
+/target
+Cargo.lock
+
+# Project-specific directories
+/tasks
+/rules
+
+# IDE/Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.vim/
+.netrwhist
+
+# OS-specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.pid
+*.seed
+*.pid.lock
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Backup files
+*.bak
+*.backup
+*.orig
+
+# Coverage reports
+tarpaulin-report.html
+coverage/
+*.profraw
+
+# Documentation build
+book/
+
+# Local configuration
+config.local.*

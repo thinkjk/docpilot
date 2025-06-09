@@ -1,0 +1,343 @@
+# DocPilot 🚁
+
+**Intelligent Terminal Documentation Tool**
+
+DocPilot automatically captures your terminal commands and generates comprehensive, AI-enhanced documentation of your workflows. Perfect for creating tutorials, documenting processes, and sharing knowledge with your team.
+
+[![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/tests-258%20passing-green.svg)](#testing)
+
+## ✨ Features
+
+### 🎯 **Smart Command Capture**
+
+- **Cross-platform terminal monitoring** (Linux, macOS)
+- **Multi-shell support** (Bash, Zsh, Fish)
+- **Real-time command tracking** with timestamps and context
+- **Automatic success/failure detection**
+
+### 🤖 **AI-Powered Analysis**
+
+- **Multiple LLM providers** (Claude, ChatGPT, Gemini, Ollama)
+- **Intelligent command explanation** and context analysis
+- **Issue identification** and alternative suggestions
+- **Security recommendations** and best practices
+
+### 🔒 **Privacy & Security**
+
+- **Smart privacy filtering** with configurable sensitivity levels
+- **Automatic redaction** of passwords, API keys, and sensitive data
+- **Secure API key storage** with encryption
+- **Customizable sensitive pattern detection**
+
+### 📝 **Professional Documentation**
+
+- **Beautiful Markdown output** with syntax highlighting
+- **Hierarchical organization** by workflow phases
+- **Customizable templates** and formatting options
+- **Code block generation** with intelligent language detection
+
+### 🛡️ **Advanced Filtering**
+
+- **Command validation** and sequence dependency checking
+- **Typo detection** and suspicious command filtering
+- **Workflow optimization** suggestions
+- **Command deduplication** and cleanup
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- **Rust 1.70+** - [Install Rust](https://rustup.rs/)
+- **Git** - For cloning the repository
+
+### Installation
+
+#### Option 1: Install from Source (Recommended)
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/docpilot.git
+cd docpilot
+
+# Build and install
+cargo build --release
+cargo install --path .
+```
+
+#### Option 2: Install from Crates.io (Coming Soon)
+
+```bash
+cargo install docpilot
+```
+
+### Initial Setup
+
+1. **Configure your LLM provider** (optional but recommended):
+
+```bash
+# Set up Claude (recommended)
+docpilot config set-provider claude
+docpilot config set-api-key your-claude-api-key
+
+# Or use OpenAI
+docpilot config set-provider openai
+docpilot config set-api-key your-openai-api-key
+
+# Or use local Ollama
+docpilot config set-provider ollama
+docpilot config set-base-url http://localhost:11434
+```
+
+2. **Test the installation**:
+
+```bash
+docpilot --version
+docpilot --help
+```
+
+## 📖 Usage
+
+### Basic Workflow
+
+1. **Start a documentation session**:
+
+```bash
+docpilot start "Setting up a new React project"
+```
+
+2. **Run your commands normally** - DocPilot monitors in the background:
+
+```bash
+npx create-react-app my-app
+cd my-app
+npm install axios
+npm start
+```
+
+3. **Add manual annotations** for non-terminal activities:
+
+```bash
+docpilot annotate "Opened browser and navigated to localhost:3000"
+docpilot annotate "Verified the React app is running correctly"
+```
+
+4. **Stop the session and generate documentation**:
+
+```bash
+docpilot stop
+docpilot generate --output my-react-setup.md
+```
+
+### Advanced Usage
+
+#### Session Management
+
+```bash
+# List all sessions
+docpilot list
+
+# Resume a paused session
+docpilot resume session-id
+
+# Export session data
+docpilot export session-id --format json
+
+# Import session data
+docpilot import backup.json
+```
+
+#### Customization
+
+```bash
+# Configure privacy filtering
+docpilot config set-privacy-mode strict  # strict|moderate|lenient
+
+# Enable/disable features
+docpilot config set-validation true
+docpilot config set-deduplication true
+docpilot config set-ai-analysis true
+
+# Customize output format
+docpilot generate --template comprehensive --theme dark
+```
+
+#### Filtering and Validation
+
+```bash
+# Generate with specific filtering
+docpilot generate --exclude-failed --only-successful
+
+# Include workflow optimizations
+docpilot generate --include-optimizations
+
+# Custom sensitive patterns
+docpilot config add-sensitive-pattern "secret-.*"
+```
+
+## 🔧 Configuration
+
+DocPilot stores configuration in `~/.config/docpilot/config.json`. You can edit this file directly or use the CLI:
+
+```bash
+# View current configuration
+docpilot config show
+
+# Set configuration values
+docpilot config set-key value
+
+# Reset to defaults
+docpilot config reset
+```
+
+### Configuration Options
+
+| Option                 | Description                                         | Default    |
+| ---------------------- | --------------------------------------------------- | ---------- |
+| `llm_provider`         | AI provider (claude, openai, gemini, ollama)        | `claude`   |
+| `privacy_mode`         | Privacy filtering level (strict, moderate, lenient) | `moderate` |
+| `enable_validation`    | Command sequence validation                         | `true`     |
+| `enable_deduplication` | Remove duplicate commands                           | `true`     |
+| `auto_save_interval`   | Auto-save interval in seconds                       | `300`      |
+| `max_session_duration` | Maximum session duration in hours                   | `24`       |
+
+## 📚 Examples
+
+### Example 1: Docker Setup Documentation
+
+```bash
+docpilot start "Docker containerization setup"
+
+# Your commands
+docker build -t myapp .
+docker run -p 3000:3000 myapp
+docker ps
+docker logs container-id
+
+docpilot annotate "Verified application is running in container"
+docpilot stop
+docpilot generate --output docker-setup.md --template comprehensive
+```
+
+### Example 2: Server Deployment
+
+```bash
+docpilot start "Production server deployment"
+
+# Your deployment commands
+ssh user@server
+git pull origin main
+npm install --production
+pm2 restart app
+nginx -t && systemctl reload nginx
+
+docpilot stop
+docpilot generate --output deployment-guide.md --include-optimizations
+```
+
+## 🏗️ Architecture
+
+DocPilot is built with a modular architecture:
+
+```
+src/
+├── main.rs              # CLI entry point
+├── terminal/            # Terminal monitoring
+│   ├── monitor.rs       # Command capture
+│   └── platform.rs      # Cross-platform support
+├── llm/                 # AI integration
+│   ├── client.rs        # LLM client abstraction
+│   ├── analyzer.rs      # AI analysis engine
+│   └── prompt.rs        # Prompt engineering
+├── session/             # Session management
+│   └── manager.rs       # Session lifecycle
+├── filter/              # Command filtering
+│   └── command.rs       # Filtering and validation
+└── output/              # Documentation generation
+    ├── markdown.rs      # Markdown templates
+    └── codeblock.rs     # Code formatting
+```
+
+## 🧪 Testing
+
+DocPilot has comprehensive test coverage with 258 tests:
+
+```bash
+# Run all tests
+cargo test
+
+# Run specific test modules
+cargo test filter::command
+cargo test llm::integration
+cargo test session::manager
+
+# Run with coverage
+cargo test --all-features
+```
+
+### Test Categories
+
+- **Unit Tests**: Individual component testing
+- **Integration Tests**: Cross-component functionality
+- **End-to-End Tests**: Complete workflow validation
+- **Privacy Tests**: Sensitive data filtering
+- **Validation Tests**: Command sequence validation
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+
+### Development Setup
+
+```bash
+# Clone and setup
+git clone https://github.com/yourusername/docpilot.git
+cd docpilot
+
+# Install development dependencies
+cargo build
+
+# Run tests
+cargo test
+
+# Run with debug logging
+RUST_LOG=debug cargo run -- start "test session"
+```
+
+### Code Style
+
+- Follow Rust standard formatting: `cargo fmt`
+- Ensure clippy compliance: `cargo clippy`
+- Add tests for new features
+- Update documentation for API changes
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- **Rust Community** for excellent tooling and libraries
+- **LLM Providers** for AI capabilities
+- **Contributors** who help improve DocPilot
+
+## 📞 Support
+
+- **Issues**: [GitHub Issues](https://github.com/yourusername/docpilot/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/yourusername/docpilot/discussions)
+- **Documentation**: [Wiki](https://github.com/yourusername/docpilot/wiki)
+
+## 🗺️ Roadmap
+
+- [ ] **Web Interface** - Browser-based session management
+- [ ] **Team Collaboration** - Shared sessions and templates
+- [ ] **Plugin System** - Custom analyzers and formatters
+- [ ] **Cloud Sync** - Cross-device session synchronization
+- [ ] **IDE Integration** - VS Code and other editor plugins
+
+---
+
+**Made with ❤️ by the DocPilot team**
+
+_Transform your terminal commands into beautiful documentation effortlessly._
