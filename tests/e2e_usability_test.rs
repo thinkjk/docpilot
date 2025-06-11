@@ -844,7 +844,7 @@ async fn main() -> Result<()> {
     
     println!("\n🧪 Running {} test suites...\n", test_functions.len());
     
-    for (name, _) in test_functions {
+    for (name, _) in &test_functions {
         println!("🔍 Testing: {}", name);
         // In a real scenario, you'd run the actual test functions here
         // For now, we'll just indicate what would be tested

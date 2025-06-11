@@ -112,35 +112,9 @@ impl Platform {
                     return Err(anyhow!("Cannot access /proc filesystem for process monitoring"));
                 }
                 
-                // For test environments, allow operation without history files
-                let is_test_env = env::var("PWD")
-                    .map(|pwd| pwd.starts_with("/tmp"))
-                    .unwrap_or(false) ||
-                    env::current_dir()
-                    .map(|dir| dir.to_string_lossy().contains("/tmp"))
-                    .unwrap_or(false);
-                    
-                if is_test_env {
-                    println!("Running in test environment, skipping history file checks");
-                    return Ok(());
-                }
-                
-                // Check if we can access shell history files
-                if let Ok(home) = env::var("HOME") {
-                    let history_files = vec![
-                        PathBuf::from(home.clone()).join(".bash_history"),
-                        PathBuf::from(home.clone()).join(".zsh_history"),
-                        PathBuf::from(home).join(".local/share/fish/fish_history"),
-                    ];
-                    
-                    for file in history_files {
-                        if file.exists() && !file.metadata()?.permissions().readonly() {
-                            return Ok(());
-                        }
-                    }
-                }
-                
-                Err(anyhow!("Cannot access shell history files"))
+                // Real-time monitoring only - no shell history file access needed
+                println!("Initializing real-time monitoring for Linux");
+                Ok(())
             }
             Platform::MacOS => {
                 // Check if we can use system APIs
@@ -152,30 +126,9 @@ impl Platform {
                     return Err(anyhow!("Cannot execute process monitoring commands"));
                 }
                 
-                // For test environments, allow operation without history files
-                if let Ok(pwd) = env::var("PWD") {
-                    if pwd.starts_with("/tmp") {
-                        println!("Running in test environment, skipping history file checks");
-                        return Ok(());
-                    }
-                }
-                
-                // Check shell history access similar to Linux
-                if let Ok(home) = env::var("HOME") {
-                    let history_files = vec![
-                        PathBuf::from(home.clone()).join(".bash_history"),
-                        PathBuf::from(home.clone()).join(".zsh_history"),
-                        PathBuf::from(home).join(".local/share/fish/fish_history"),
-                    ];
-                    
-                    for file in history_files {
-                        if file.exists() {
-                            return Ok(());
-                        }
-                    }
-                }
-                
-                Err(anyhow!("Cannot access shell history files"))
+                // Real-time monitoring only - no shell history file access needed
+                println!("Initializing real-time monitoring for macOS");
+                Ok(())
             }
             Platform::Unknown(os) => {
                 Err(anyhow!("Unsupported platform: {}", os))
@@ -275,23 +228,6 @@ impl PlatformUtils {
         Ok(())
     }
 
-    /// Get platform-specific shell history paths
-    pub fn get_history_paths() -> Vec<PathBuf> {
-        let platform = Platform::detect();
-        let home = match env::var("HOME") {
-            Ok(h) => PathBuf::from(h),
-            Err(_) => return vec![],
-        };
-
-        match platform {
-            Platform::Linux | Platform::MacOS => vec![
-                home.join(".bash_history"),
-                home.join(".zsh_history"),
-                home.join(".local/share/fish/fish_history"),
-            ],
-            Platform::Unknown(_) => vec![home.join(".history")],
-        }
-    }
 
     /// Check if running in a supported environment
     pub fn is_supported_environment() -> bool {
@@ -315,8 +251,8 @@ mod tests {
         let platform = PlatformUtils::current_platform();
         assert!(!platform.name().is_empty());
         
-        let history_paths = PlatformUtils::get_history_paths();
-        assert!(!history_paths.is_empty());
+        // Real-time monitoring test - no history paths needed
+        assert!(PlatformUtils::is_supported_environment());
     }
 
     #[test]

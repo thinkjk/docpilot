@@ -407,7 +407,7 @@ impl SessionManager {
     }
 
     /// Get the directory where sessions are stored
-    fn get_sessions_directory() -> Result<PathBuf> {
+    pub fn get_sessions_directory() -> Result<PathBuf> {
         let home = std::env::var("HOME")
             .or_else(|_| std::env::var("USERPROFILE"))
             .map_err(|_| anyhow!("Cannot determine home directory"))?;
@@ -430,6 +430,20 @@ impl SessionManager {
             return Err(anyhow!("A session is already active. Stop the current session first."));
         }
 
+        let session = Session::new(description, output_file)?;
+        let session_id = session.id.clone();
+        
+        self.save_session(&session)?;
+        self.current_session = Some(session);
+        
+        Ok(session_id)
+    }
+
+    /// Force start a new session (used after interactive handling of existing sessions)
+    pub fn force_start_session(&mut self, description: String, output_file: Option<PathBuf>) -> Result<String> {
+        // Clear any existing session first
+        self.current_session = None;
+        
         let session = Session::new(description, output_file)?;
         let session_id = session.id.clone();
         
@@ -517,6 +531,11 @@ impl SessionManager {
     /// Set the current session (used for recovery and background processes)
     pub fn set_current_session(&mut self, session: Session) {
         self.current_session = Some(session);
+    }
+
+    /// Clear the current session (used for interactive session handling)
+    pub fn clear_current_session(&mut self) {
+        self.current_session = None;
     }
 
     /// Load a session by ID

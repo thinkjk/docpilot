@@ -288,6 +288,20 @@ EXAMPLES:
         /// Session ID to monitor
         session_id: String,
     },
+    
+    /// Hidden command to output shell hooks for evaluation (hidden)
+    #[command(hide = true)]
+    Hooks {
+        /// Session ID for hooks
+        session_id: String,
+    },
+    
+    /// 🧪 Simulate commands for testing (hidden)
+    #[command(hide = true)]
+    Simulate {
+        /// Commands to simulate (comma-separated)
+        commands: String,
+    },
 }
 
 /// Check if we're running in a test environment
@@ -308,25 +322,141 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     let mut session_manager = SessionManager::new()?;
 
-    // Try to recover any interrupted sessions on startup
-    if let Ok(Some(recovered_session_id)) = session_manager.recover_session() {
-        println!("Recovered interrupted session: {}", recovered_session_id);
-        println!("Use 'docpilot status' to see session details");
-        println!("Use 'docpilot stop' to finalize the session");
-    }
+    // Session recovery is now handled per-command as needed
+    // No global session recovery to prevent conflicts
 
     match cli.command {
         Commands::Start { description, output, foreground } => {
-            // Check if there's already an active session
+            // Try to recover any interrupted sessions first
+            if let Ok(Some(recovered_session_id)) = session_manager.recover_session() {
+                println!("🔄 Found interrupted session: {}", recovered_session_id);
+                println!();
+            }
+            
+            // Check if there's already an active session (including recovered ones)
             if let Some(current_session) = session_manager.get_current_session() {
-                eprintln!("A session is already active:");
-                eprintln!("  Session ID: {}", current_session.id);
-                eprintln!("  Description: {}", current_session.description);
-                eprintln!("  State: {:?}", current_session.state);
-                eprintln!();
-                eprintln!("Please stop the current session first with 'docpilot stop'");
-                eprintln!("Or use 'docpilot status' to see more details");
-                std::process::exit(1);
+                println!("⚠️  An active session is already running:");
+                println!("   Session ID: {}", current_session.id);
+                println!("   Description: {}", current_session.description);
+                println!("   State: {:?}", current_session.state);
+                println!("   Commands captured: {}", current_session.stats.total_commands);
+                println!();
+                
+                // Interactive prompt for handling the existing session
+                println!("DocPilot only supports one active session at a time to prevent shell hook conflicts.");
+                println!("What would you like to do with the existing session?");
+                println!();
+                println!("1. Stop and generate documentation from current session, then start new one");
+                println!("2. Stop current session without generating docs, then start new one");
+                println!("3. Cancel - keep current session running");
+                println!();
+                print!("Choose option (1/2/3): ");
+                
+                use std::io::{self, Write};
+                io::stdout().flush().unwrap();
+                
+                let mut input = String::new();
+                match io::stdin().read_line(&mut input) {
+                    Ok(_) => {
+                        let choice = input.trim();
+                        match choice {
+                            "1" => {
+                                println!();
+                                println!("🛑 Stopping current session and generating documentation...");
+                                
+                                // Stop current session
+                                match session_manager.stop_session() {
+                                    Ok(Some(session)) => {
+                                        println!("✅ Session '{}' stopped successfully!", session.description);
+                                        
+                                        // Generate documentation from the stopped session
+                                        let output_file = if let Some(ref session_output) = session.output_file {
+                                            session_output.clone()
+                                        } else {
+                                            // Generate filename from session description
+                                            let sanitized_desc = session.description
+                                                .chars()
+                                                .map(|c| if c.is_alphanumeric() || c == ' ' { c } else { ' ' })
+                                                .collect::<String>()
+                                                .split_whitespace()
+                                                .collect::<Vec<_>>()
+                                                .join("-")
+                                                .to_lowercase();
+                                            std::path::PathBuf::from(format!("{}.md", sanitized_desc))
+                                        };
+                                        
+                                        println!("📄 Generating documentation to: {}", output_file.display());
+                                        match crate::output::generate_documentation(&session, &output_file, "standard").await {
+                                            Ok(_) => {
+                                                println!("✅ Documentation generated successfully!");
+                                                println!("📄 Saved to: {}", output_file.display());
+                                            }
+                                            Err(e) => {
+                                                eprintln!("⚠️  Warning: Failed to generate documentation: {}", e);
+                                                eprintln!("   You can generate it later with: docpilot generate --session {}", session.id);
+                                            }
+                                        }
+                                        
+                                        // Ensure current session is cleared for new session start
+                                        session_manager.clear_current_session();
+                                    }
+                                    Ok(None) => {
+                                        println!("ℹ️  No session was active (unexpected state)");
+                                    }
+                                    Err(e) => {
+                                        eprintln!("❌ Failed to stop current session: {}", e);
+                                        eprintln!("   Please run 'docpilot stop' manually first");
+                                        std::process::exit(1);
+                                    }
+                                }
+                                
+                                println!();
+                                println!("🚀 Now starting new session: {}", description);
+                            }
+                            "2" => {
+                                println!();
+                                println!("🛑 Stopping current session without generating documentation...");
+                                
+                                match session_manager.stop_session() {
+                                    Ok(Some(session)) => {
+                                        println!("✅ Session '{}' stopped successfully!", session.description);
+                                        println!("💡 You can generate documentation later with: docpilot generate --session {}", session.id);
+                                        
+                                        // Ensure current session is cleared for new session start
+                                        session_manager.clear_current_session();
+                                    }
+                                    Ok(None) => {
+                                        println!("ℹ️  No session was active (unexpected state)");
+                                    }
+                                    Err(e) => {
+                                        eprintln!("❌ Failed to stop current session: {}", e);
+                                        eprintln!("   Please run 'docpilot stop' manually first");
+                                        std::process::exit(1);
+                                    }
+                                }
+                                
+                                println!();
+                                println!("🚀 Now starting new session: {}", description);
+                            }
+                            "3" | "" => {
+                                println!();
+                                println!("❌ Cancelled. Keeping current session active.");
+                                println!("   Use 'docpilot stop' to end it manually");
+                                println!("   Use 'docpilot status' to see session details");
+                                std::process::exit(0);
+                            }
+                            _ => {
+                                println!();
+                                eprintln!("❌ Invalid choice. Please run the command again and choose 1, 2, or 3.");
+                                std::process::exit(1);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("❌ Failed to read input: {}", e);
+                        std::process::exit(1);
+                    }
+                }
             }
 
             println!("🚀 Starting documentation session: {}", description);
@@ -338,8 +468,15 @@ async fn main() -> Result<()> {
                 println!("📄 Output file will be auto-generated based on session");
             }
             
-            // Start new session
-            match session_manager.start_session(description.clone(), output_path) {
+            // Start new session (use force_start if we just handled an existing session)
+            let start_result = if session_manager.get_current_session().is_some() {
+                // We should not reach this point anymore, but as a fallback
+                session_manager.force_start_session(description.clone(), output_path)
+            } else {
+                session_manager.start_session(description.clone(), output_path)
+            };
+            
+            match start_result {
                 Ok(session_id) => {
                     println!("✅ Session started successfully!");
                     println!("   Session ID: {}", session_id);
@@ -381,6 +518,8 @@ async fn main() -> Result<()> {
                     
                     match monitor.start_monitoring() {
                         Ok(_) => {
+                            println!("🔄 Direct terminal monitoring enabled");
+                            
                             println!();
                             println!("🔍 Terminal monitoring started successfully!");
                             
@@ -491,7 +630,7 @@ async fn main() -> Result<()> {
                                 std::env::current_dir()
                                 .map(|dir| dir.to_string_lossy().contains("/tmp"))
                                 .unwrap_or(false) ||
-                                e.to_string().contains("Cannot access shell history files");
+                                false; // No longer checking for shell history files
                             
                             if is_test_env {
                                 eprintln!("   Running in test environment - continuing without terminal monitoring");
@@ -519,6 +658,11 @@ async fn main() -> Result<()> {
             }
         }
         Commands::Stop => {
+            // Try to recover any interrupted sessions first
+            if let Ok(Some(recovered_session_id)) = session_manager.recover_session() {
+                println!("🔄 Recovered interrupted session: {}", recovered_session_id);
+            }
+            
             // Check for and stop background monitoring process
             let home_dir = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
             let docpilot_dir = PathBuf::from(home_dir).join(".docpilot");
@@ -1027,10 +1171,25 @@ async fn main() -> Result<()> {
                 // Use current session or most recent completed session
                 session_manager.get_current_session().cloned()
                     .or_else(|| {
-                        // Try to get the most recent completed session
+                        // Try to get the most recent completed session by modification time
                         session_manager.list_sessions()
                             .ok()
-                            .and_then(|sessions| sessions.first().cloned())
+                            .and_then(|sessions| {
+                                // Sort sessions by modification time (most recent first)
+                                let mut session_with_times: Vec<_> = sessions.into_iter()
+                                    .filter_map(|session_id| {
+                                        let session_file = SessionManager::get_sessions_directory()
+                                            .ok()?
+                                            .join(format!("{}.json", session_id));
+                                        let metadata = std::fs::metadata(&session_file).ok()?;
+                                        let modified = metadata.modified().ok()?;
+                                        Some((session_id, modified))
+                                    })
+                                    .collect();
+                                
+                                session_with_times.sort_by(|a, b| b.1.cmp(&a.1));
+                                session_with_times.first().map(|(id, _)| id.clone())
+                            })
                             .and_then(|session_id| session_manager.load_session(&session_id).ok())
                     })
             };
@@ -1220,15 +1379,75 @@ async fn main() -> Result<()> {
                         monitor.set_session_start_time(started_at);
                     }
                     
-                    // For background processes, keep the history position from the main process
-                    // This allows it to continue from where the main process left off
-                    // Don't call reset_history_position() here
-                    
                     if monitor.start_monitoring_background().is_ok() {
-                        // Run the monitoring loop
+                        println!("Background monitoring started - direct terminal monitoring");
+                        println!("Commands will be captured through terminal session monitoring");
+                        
+                        // Run the monitoring loop with real-time capture
                         let _ = monitor_with_session(&mut monitor, &mut session_manager).await;
                     }
                 }
+            }
+        }
+        Commands::Hooks { session_id } => {
+            // This outputs the shell hooks content directly for evaluation
+            // Create a temporary monitor to generate hooks
+            if let Ok(monitor) = TerminalMonitor::new(session_id.clone()) {
+                match monitor.get_shell_hooks_content() {
+                    Ok(hooks_content) => {
+                        // Output the hooks content directly - no other output
+                        print!("{}", hooks_content);
+                    }
+                    Err(e) => {
+                        eprintln!("Error generating hooks: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            } else {
+                eprintln!("Error creating monitor for hooks");
+                std::process::exit(1);
+            }
+        }
+        Commands::Simulate { commands } => {
+            // This is a hidden testing command to simulate user commands
+            if let Some(mut session) = session_manager.get_current_session_mut() {
+                println!("🧪 Simulating commands for testing...");
+                
+                let cmd_list: Vec<&str> = commands.split(',').collect();
+                let mut simulated_count = 0;
+                
+                for cmd in &cmd_list {
+                    let cmd = cmd.trim();
+                    if !cmd.is_empty() {
+                        println!("   Simulating: {}", cmd);
+                        
+                        // Create a command entry
+                        let entry = crate::terminal::CommandEntry {
+                            command: cmd.to_string(),
+                            timestamp: chrono::Utc::now(),
+                            exit_code: Some(0),
+                            working_directory: std::env::current_dir()
+                                .map(|p| p.display().to_string())
+                                .unwrap_or_else(|_| "unknown".to_string()),
+                            shell: "zsh".to_string(),
+                            output: None,
+                            error: None,
+                        };
+                        
+                        // Add to session
+                        session.add_command(entry);
+                        simulated_count += 1;
+                    }
+                }
+                
+                // Save the session
+                let session_clone = session.clone();
+                let _ = session_manager.save_session(&session_clone);
+                
+                println!("✅ Simulated {} commands", simulated_count);
+            } else {
+                eprintln!("❌ No active session found for simulation");
+                std::process::exit(1);
             }
         }
     }
@@ -1352,9 +1571,9 @@ async fn monitor_with_session(
                 }
             }
             _ = command_check_interval.tick() => {
-                // Check for new commands periodically
+                // Check for new commands using direct terminal monitoring
                 if monitor.is_monitoring() {
-                    match monitor.check_history_once().await {
+                    match monitor.check_for_new_commands().await {
                         Ok(new_commands) => {
                             for command in new_commands {
                                 if let Err(e) = session_manager.add_command(command.clone()) {
@@ -1365,7 +1584,7 @@ async fn monitor_with_session(
                             }
                         }
                         Err(e) => {
-                            eprintln!("📡 History monitoring error: {}", e);
+                            eprintln!("📡 Terminal monitoring error: {}", e);
                         }
                     }
                 }

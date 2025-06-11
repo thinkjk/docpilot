@@ -46,6 +46,12 @@ Commands include intuitive aliases for faster typing:
 ```bash
 # Start documenting a workflow (runs in background by default)
 docpilot start "Setting up development environment"
+# DocPilot creates shell integration hooks automatically
+
+# Enable command capture in your current shell (one-time per shell session)
+source ~/.docpilot/zsh_hooks.zsh  # Simple sourcing (recommended)
+
+# Start with custom output file
 docpilot begin "Database migration" --output migration.md
 
 # Run in foreground for debugging
@@ -125,6 +131,9 @@ EXAMPLES:
     # Start documenting a new workflow (runs in background by default)
     docpilot start "Setting up development environment"
 
+    # Enable command capture (DocPilot shows the exact command to run)
+    source ~/.docpilot/zsh_hooks.zsh
+
     # Add annotations while working
     docpilot note "Installing dependencies"
     docpilot warn "This requires admin privileges"
@@ -148,7 +157,9 @@ allowing you to add annotations and generate comprehensive documentation.
 By default, DocPilot runs in background mode, allowing you to continue using your terminal normally while commands are captured automatically.
 
 EXAMPLES:
-    docpilot start "Setting up development environment"                    # Runs in background (default)
+    docpilot start "Setting up development environment"                    # Creates hooks, runs in background (default)
+    # Then run: source ~/.docpilot/zsh_hooks.zsh                          # Enable command capture (simple sourcing)
+
     docpilot start "Database migration process" --output migration-guide.md  # Background with custom output
     docpilot start "API testing workflow" --foreground                      # Runs in foreground for debugging
 

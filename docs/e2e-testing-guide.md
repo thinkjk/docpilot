@@ -201,19 +201,20 @@ make help-e2e
 
 **Expected outcome**: Complete and accurate help system
 
-### Suite 10: Shell Integration
+### Suite 10: Shell Integration & Command Capture
 
-**Purpose**: Tests integration with shell commands
+**Purpose**: Tests reliable command capture system
 
 **What it tests**:
 
-- Running alongside other commands
-- Environment variable handling
-- Working directory management
-- Process isolation
-- Signal handling
+- Shell hook generation with dynamic session detection
+- Direct log file monitoring (session-isolated)
+- Real-time command capture (no shell history dependency)
+- Proper session ID matching between hooks and monitoring
+- Shell-specific hook functionality (Bash, Zsh, Fish)
+- Background monitoring reading from correct log files
 
-**Expected outcome**: Seamless shell integration
+**Expected outcome**: Accurate command capture with proper session management
 
 ## 🔧 Test Infrastructure
 

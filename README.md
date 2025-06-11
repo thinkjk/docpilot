@@ -12,11 +12,13 @@ DocPilot automatically captures your terminal commands and generates comprehensi
 
 ### 🎯 **Smart Command Capture**
 
-- **Cross-platform terminal monitoring** (Linux, macOS)
-- **Multi-shell support** (Bash, Zsh, Fish)
+- **Reliable shell integration** - DocPilot automatically configures shell hooks with proper session management
+- **Multi-shell support** (Bash, Zsh, Fish) with dynamic session detection
+- **Session-isolated tracking** - only commands from active DocPilot sessions, no shell history pollution
 - **Background monitoring by default** - continue using your terminal normally
-- **Real-time command tracking** with timestamps and context
-- **Automatic success/failure detection**
+- **Minimal setup** - one command to activate current session, future sessions auto-configured
+- **Automatic success/failure detection** with exit code capture
+- **Recent fixes** - Command capture now works reliably with proper session ID matching
 
 ### 🤖 **AI-Powered Analysis**
 
@@ -127,9 +129,19 @@ docpilot --help
 
 ```bash
 docpilot start "Setting up a new React project"
+# DocPilot shows you exactly what to run next
 ```
 
-2. **Run your commands normally** - DocPilot monitors in the background:
+2. **Activate command capture for current session** (one simple command):
+
+```bash
+# DocPilot provides the exact command to copy and paste:
+source ~/.docpilot/zsh_hooks.zsh
+# ✅ Current session: Commands now captured automatically
+# ✅ Future sessions: Already configured to auto-capture
+```
+
+3. **Run your commands normally** - DocPilot captures them automatically:
 
 ```bash
 npx create-react-app my-app
@@ -138,14 +150,14 @@ npm install axios
 npm start
 ```
 
-3. **Add manual annotations** for non-terminal activities:
+4. **Add manual annotations** for non-terminal activities:
 
 ```bash
 docpilot annotate "Opened browser and navigated to localhost:3000"
 docpilot annotate "Verified the React app is running correctly"
 ```
 
-4. **Stop the session and generate documentation**:
+5. **Stop the session and generate documentation**:
 
 ```bash
 docpilot stop
@@ -235,6 +247,9 @@ docpilot config --provider ollama --base-url http://localhost:11434
 # Start session (runs in background by default)
 docpilot start "Docker containerization setup"
 
+# Activate command capture (DocPilot shows the exact command)
+source ~/.docpilot/zsh_hooks.zsh
+
 # Your commands - DocPilot captures them automatically
 docker build -t myapp .
 docker run -p 3000:3000 myapp
@@ -251,6 +266,9 @@ docpilot generate --output docker-setup.md --template comprehensive
 ```bash
 # Start session in background (default behavior)
 docpilot start "Production server deployment"
+
+# Activate command capture (DocPilot shows the exact command)
+source ~/.docpilot/zsh_hooks.zsh
 
 # Your deployment commands - monitored automatically
 ssh user@server
@@ -324,10 +342,16 @@ docpilot/
 
 #### 🖥️ **Terminal Module** (`src/terminal/`)
 
-- **Cross-platform monitoring** for Linux, macOS, and Windows
-- **Multi-shell support** (Bash, Zsh, Fish, PowerShell)
-- **Real-time command capture** with background processing
-- **Platform-specific optimizations** for different operating systems
+- **Reliable shell integration** - Creates shell-specific hook files with dynamic session detection
+- **Multi-shell support** (Bash, Zsh, Fish) with intelligent hook generation:
+  - **Zsh**: Uses `preexec()` and `precmd()` functions for real-time capture
+  - **Bash**: Uses `PROMPT_COMMAND` modification for command logging
+  - **Fish**: Uses event-based functions for command capture
+- **Dynamic session detection** - Hooks automatically find the most recent active session
+- **Session-isolated capture** - Only commands from active DocPilot sessions
+- **No shell history dependency** - Completely eliminates contamination from previous sessions
+- **Smart log file management** - Background monitoring reads from correct hook log files
+- **Automatic cleanup** - Hook files created in `~/.docpilot/` and cleaned up on session end
 
 #### 🤖 **LLM Module** (`src/llm/`)
 
