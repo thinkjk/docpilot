@@ -1196,6 +1196,15 @@ impl MarkdownTemplate {
         if let Some(analyzer_cell) = &self.ai_analyzer {
             let config = &self.config.ai_analysis_config;
             
+            // Show progress for AI analysis
+            println!("   🔍 Analyzing command: {}",
+                if command.command.len() > 50 {
+                    format!("{}...", &command.command[..47])
+                } else {
+                    command.command.clone()
+                }
+            );
+            
             // Create analysis context from command
             let context = format!(
                 "Command: {}\nWorking Directory: {}\nShell: {}\nExit Code: {:?}",
@@ -1234,7 +1243,7 @@ impl MarkdownTemplate {
                     }
                     Err(_) => {
                         // RefCell is already borrowed, skip AI analysis for this command
-                        eprintln!("AI analyzer is busy, skipping analysis for command: {}", command.command);
+                        println!("   ⏭️  AI analyzer busy, skipping analysis for: {}", command.command);
                         return Ok(None);
                     }
                 }
@@ -1244,14 +1253,16 @@ impl MarkdownTemplate {
                 Ok(analysis) => {
                     // Filter analysis based on confidence score
                     if analysis.confidence_score >= config.min_confidence_score {
+                        println!("   ✅ Analysis complete (confidence: {:.1}%)", analysis.confidence_score * 100.0);
                         Ok(Some(analysis))
                     } else {
+                        println!("   ⚠️  Low confidence analysis skipped ({:.1}%)", analysis.confidence_score * 100.0);
                         Ok(None)
                     }
                 }
                 Err(e) => {
                     // Log error but don't fail the entire markdown generation
-                    eprintln!("AI analysis failed for command '{}': {}", command.command, e);
+                    println!("   ❌ AI analysis failed for '{}': {}", command.command, e);
                     Ok(None)
                 }
             }
@@ -1523,21 +1534,27 @@ impl MarkdownGenerator {
     pub async fn generate_ai_enhanced_documentation(&mut self, session: &Session) -> Result<String> {
         // First, validate and filter commands using AI
         if let Some(ai_analyzer_cell) = &self.template.ai_analyzer {
+            println!("🧹 Filtering and validating {} commands...", session.commands.len());
+            
             let mut ai_analyzer = ai_analyzer_cell.borrow_mut();
             
             // Filter and validate commands
             let validated_commands = ai_analyzer.validate_and_enhance_commands(&session.commands).await?;
+            println!("✅ Command validation complete ({} commands processed)", validated_commands.len());
             
             // Create a temporary session with validated commands for generation
             let mut enhanced_session = session.clone();
             enhanced_session.commands = validated_commands;
             
             // Generate the base documentation
+            println!("📝 Generating base documentation structure...");
             let base_markdown = self.template.generate(&enhanced_session).await?;
             
             // Post-process the markdown using AI
+            println!("🤖 Applying AI post-processing to improve documentation quality...");
             let enhanced_markdown = self.post_process_markdown_with_ai(&base_markdown, &enhanced_session).await?;
             
+            println!("✅ AI-enhanced documentation generation complete!");
             Ok(enhanced_markdown)
         } else {
             // Fallback to regular generation if no AI analyzer
@@ -1551,6 +1568,7 @@ impl MarkdownGenerator {
             // Use try_borrow to avoid conflicts
             match ai_analyzer_cell.try_borrow() {
                 Ok(_ai_analyzer) => {
+                    println!("   🎯 Creating enhancement prompts...");
                     // Use the prompt engine to create a markdown post-processing prompt
                     let prompt_engine = crate::llm::prompt::PromptEngine::new();
                     let (system_prompt, user_prompt) = prompt_engine.generate_markdown_processing_prompt(
@@ -1559,19 +1577,22 @@ impl MarkdownGenerator {
                         Some("Development team")
                     )?;
                     
+                    println!("   🤖 Sending to AI for final optimization...");
                     // Query the LLM to improve the markdown
                     let llm_response = self.query_llm_for_enhancement(&system_prompt, &user_prompt).await?;
                     
                     // Return the enhanced markdown or fall back to original if processing fails
                     if llm_response.len() > 100 && !llm_response.contains("Analysis unavailable") {
+                        println!("   ✅ AI post-processing successful");
                         Ok(llm_response)
                     } else {
+                        println!("   ⚠️  AI post-processing produced minimal result, using original");
                         Ok(markdown.to_string())
                     }
                 }
                 Err(_) => {
                     // RefCell is already borrowed, skip post-processing
-                    eprintln!("AI analyzer is busy, skipping markdown post-processing");
+                    println!("   ⏭️  AI analyzer busy, skipping markdown post-processing");
                     Ok(markdown.to_string())
                 }
             }
@@ -1632,23 +1653,30 @@ impl MarkdownGenerator {
     /// Generate comprehensive documentation with AI assistance
     pub async fn generate_comprehensive_ai_documentation(&mut self, session: &Session) -> Result<String> {
         if let Some(ai_analyzer_cell) = &self.template.ai_analyzer {
+            println!("🔬 Generating comprehensive AI analysis...");
+            
             // Try to borrow and generate enhanced documentation
             let enhanced_doc = match ai_analyzer_cell.try_borrow_mut() {
                 Ok(mut ai_analyzer) => {
                     // Use AI to generate enhanced documentation structure
+                    println!("📊 Analyzing workflow patterns and command relationships...");
                     let _commands: Vec<String> = session.commands.iter().map(|c| c.command.clone()).collect();
-                    ai_analyzer.generate_enhanced_documentation(&session.commands, Some(&session.description)).await?
+                    let doc = ai_analyzer.generate_enhanced_documentation(&session.commands, Some(&session.description)).await?;
+                    println!("✅ Workflow analysis complete");
+                    doc
                 }
                 Err(_) => {
-                    eprintln!("AI analyzer is busy, generating basic documentation instead");
+                    println!("⚠️  AI analyzer is busy, generating basic documentation instead");
                     return self.template.generate(session).await;
                 }
             };
             
             // Combine with regular markdown generation for complete documentation
+            println!("📝 Generating detailed command documentation...");
             let base_markdown = self.template.generate(session).await?;
             
             // Merge AI-generated content with template-generated content
+            println!("🔗 Combining AI analysis with detailed logs...");
             let combined_markdown = format!(
                 "{}\n\n## AI-Enhanced Analysis\n\n{}\n\n## Detailed Command Log\n\n{}",
                 self.generate_executive_summary(session),
@@ -1657,7 +1685,10 @@ impl MarkdownGenerator {
             );
             
             // Post-process the combined content
-            self.post_process_markdown_with_ai(&combined_markdown, session).await
+            println!("✨ Final AI optimization pass...");
+            let result = self.post_process_markdown_with_ai(&combined_markdown, session).await?;
+            println!("🎉 Comprehensive AI documentation complete!");
+            Ok(result)
         } else {
             // Fallback to enhanced generation without AI analysis
             self.generate_ai_enhanced_documentation(session).await
