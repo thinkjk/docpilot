@@ -45,7 +45,7 @@ impl LlmProvider {
 
     pub fn default_model(&self) -> &str {
         match self {
-            LlmProvider::Claude => "claude-3-sonnet-20240229",
+            LlmProvider::Claude => "claude-3-5-sonnet-20241022",
             LlmProvider::ChatGpt => "gpt-4",
             LlmProvider::Gemini => "gemini-pro",
             LlmProvider::Ollama => "llama2", // Default Ollama model
@@ -180,28 +180,23 @@ impl LlmClient {
     async fn generate_claude_internal(&self, request: LlmRequest) -> Result<LlmResponse> {
         let url = format!("{}/messages", self.provider.api_base_url());
         
-        let mut messages = Vec::new();
-        
-        // Add system message if provided
-        if let Some(system) = &request.system_prompt {
-            messages.push(json!({
-                "role": "system",
-                "content": system
-            }));
-        }
-        
-        // Add user message
-        messages.push(json!({
+        // Add user message (only user messages in the messages array for Claude)
+        let messages = vec![json!({
             "role": "user",
             "content": request.prompt
-        }));
+        })];
 
-        let payload = json!({
+        let mut payload = json!({
             "model": self.model,
             "max_tokens": request.max_tokens.unwrap_or(1000),
             "temperature": request.temperature.unwrap_or(0.7),
             "messages": messages
         });
+
+        // Add system prompt as top-level parameter if provided
+        if let Some(system) = &request.system_prompt {
+            payload["system"] = json!(system);
+        }
 
         let response = self.client
             .post(&url)

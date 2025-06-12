@@ -242,7 +242,7 @@ EXAMPLES:
 This command creates comprehensive documentation from captured commands and annotations. You can specify an output file or let DocPilot generate one automatically.
 
 TEMPLATES:
-    standard        - Basic documentation with commands and annotations
+    standard        - Default template (AI-enhanced if LLM configured, otherwise basic)
     minimal         - Compact format with essential information only
     comprehensive   - Detailed documentation with full metadata
     hierarchical    - Organized by workflow phases and command types
@@ -250,7 +250,7 @@ TEMPLATES:
     technical       - Detailed technical analysis and metrics
     rich            - Enhanced with emojis and visual elements
     github          - GitHub-compatible markdown format
-    ai-enhanced     - 🤖 AI-powered analysis and explanations (requires LLM setup)
+    ai-enhanced     - 🤖 Explicit AI-powered analysis and explanations (requires LLM setup)
 
 EXAMPLES:
     docpilot generate --output my-guide.md          # Generate from current/last session
@@ -267,7 +267,7 @@ EXAMPLES:
         session: Option<String>,
         
         /// Template style for documentation
-        #[arg(short, long, default_value = "standard", help = "Template: standard, comprehensive, minimal")]
+        #[arg(short, long, default_value = "standard", help = "Template: standard (ai-enhanced if configured), comprehensive, minimal, ai-enhanced")]
         template: String,
     },
     

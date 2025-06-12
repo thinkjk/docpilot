@@ -335,21 +335,143 @@ impl AIAnalyzer {
     }
 
     /// Extract alternatives from LLM response
-    fn extract_alternatives(&self, _response: &str) -> Vec<Alternative> {
-        // TODO: Implement LLM response parsing for alternatives
-        Vec::new()
+    fn extract_alternatives(&self, response: &str) -> Vec<Alternative> {
+        let mut alternatives = Vec::new();
+        
+        // Look for structured alternative commands in the response
+        let lines: Vec<&str> = response.lines().collect();
+        let mut in_alternatives_section = false;
+        
+        for line in lines {
+            let trimmed = line.trim();
+            
+            // Look for alternatives section
+            if trimmed.to_lowercase().contains("alternative") &&
+               (trimmed.contains("command") || trimmed.contains("approach")) {
+                in_alternatives_section = true;
+                continue;
+            }
+            
+            // Extract alternatives if we're in the section
+            if in_alternatives_section {
+                if let Some(alt) = self.parse_alternative_line(trimmed) {
+                    alternatives.push(alt);
+                }
+                
+                // Stop if we reach another section
+                if trimmed.starts_with('#') || trimmed.starts_with("**") {
+                    in_alternatives_section = false;
+                }
+            }
+        }
+        
+        alternatives
     }
 
     /// Extract context insights from LLM response
-    fn extract_context_insights(&self, _response: &str) -> Vec<ContextInsight> {
-        // TODO: Implement LLM response parsing for insights
-        Vec::new()
+    fn extract_context_insights(&self, response: &str) -> Vec<ContextInsight> {
+        let mut insights = Vec::new();
+        
+        // Look for insights in the response
+        if response.to_lowercase().contains("workflow") {
+            insights.push(ContextInsight {
+                insight_type: InsightType::WorkflowOptimization,
+                description: "Command is part of a development workflow".to_string(),
+                relevance: "High - impacts team productivity".to_string(),
+                actionable: true,
+            });
+        }
+        
+        if response.to_lowercase().contains("performance") || response.to_lowercase().contains("slow") {
+            insights.push(ContextInsight {
+                insight_type: InsightType::ResourceUsage,
+                description: "Command may have performance implications".to_string(),
+                relevance: "Medium - consider optimization".to_string(),
+                actionable: true,
+            });
+        }
+        
+        if response.to_lowercase().contains("dependency") || response.to_lowercase().contains("require") {
+            insights.push(ContextInsight {
+                insight_type: InsightType::DependencyAnalysis,
+                description: "Command has dependencies that should be documented".to_string(),
+                relevance: "High - affects reproducibility".to_string(),
+                actionable: true,
+            });
+        }
+        
+        insights
     }
 
     /// Extract recommendations from LLM response
-    fn extract_recommendations(&self, _response: &str) -> Vec<Recommendation> {
-        // TODO: Implement LLM response parsing for recommendations
-        Vec::new()
+    fn extract_recommendations(&self, response: &str) -> Vec<Recommendation> {
+        let mut recommendations = Vec::new();
+        
+        // Look for recommendation patterns in the response
+        let lines: Vec<&str> = response.lines().collect();
+        
+        for line in lines {
+            let trimmed = line.trim().to_lowercase();
+            
+            if trimmed.contains("recommend") || trimmed.contains("suggest") || trimmed.contains("should") {
+                if trimmed.contains("security") || trimmed.contains("secure") {
+                    recommendations.push(Recommendation {
+                        priority: RecommendationPriority::High,
+                        category: RecommendationCategory::Security,
+                        title: "Security Enhancement".to_string(),
+                        description: line.trim().to_string(),
+                        implementation: "Review and implement suggested security measures".to_string(),
+                    });
+                } else if trimmed.contains("performance") || trimmed.contains("faster") {
+                    recommendations.push(Recommendation {
+                        priority: RecommendationPriority::Medium,
+                        category: RecommendationCategory::Performance,
+                        title: "Performance Optimization".to_string(),
+                        description: line.trim().to_string(),
+                        implementation: "Consider implementing performance improvements".to_string(),
+                    });
+                } else if trimmed.contains("document") || trimmed.contains("explain") {
+                    recommendations.push(Recommendation {
+                        priority: RecommendationPriority::Low,
+                        category: RecommendationCategory::Documentation,
+                        title: "Documentation Improvement".to_string(),
+                        description: line.trim().to_string(),
+                        implementation: "Enhance documentation with suggested details".to_string(),
+                    });
+                }
+            }
+        }
+        
+        recommendations
+    }
+
+    /// Parse a line to extract alternative command information
+    fn parse_alternative_line(&self, line: &str) -> Option<Alternative> {
+        // Look for lines with command patterns like:
+        // - `command` - description
+        // * command: description
+        // 1. command - description
+        
+        if line.contains('`') {
+            if let Some(start) = line.find('`') {
+                if let Some(end) = line[start + 1..].find('`') {
+                    let command = line[start + 1..start + 1 + end].to_string();
+                    let description = line[start + end + 2..].trim_start_matches(" - ").trim().to_string();
+                    
+                    if !command.is_empty() && !description.is_empty() {
+                        return Some(Alternative {
+                            command,
+                            description,
+                            advantages: vec!["AI-suggested alternative".to_string()],
+                            use_case: "General purpose alternative".to_string(),
+                            complexity: AlternativeComplexity::Similar,
+                        });
+                    }
+                }
+            }
+        }
+        
+        None
     }
 
     /// Detect security issues in command
@@ -461,6 +583,277 @@ impl AIAnalyzer {
     /// Get cache statistics
     pub fn cache_stats(&self) -> (usize, usize) {
         (self.analysis_cache.len(), self.analysis_cache.capacity())
+    }
+
+    /// Get reference to the LLM configuration
+    pub fn get_config(&self) -> &LlmConfig {
+        &self.config
+    }
+
+    /// Validate and filter commands for documentation quality
+    pub async fn validate_and_enhance_commands(&mut self, commands: &[CommandEntry]) -> Result<Vec<CommandEntry>> {
+        let mut validated_commands = Vec::new();
+        
+        for command in commands {
+            // Skip obviously wrong or problematic commands
+            if self.should_filter_command(&command.command) {
+                continue;
+            }
+            
+            // Enhance command with AI analysis if needed
+            let mut enhanced_command = command.clone();
+            
+            // Add AI-generated explanation if the command seems complex or unclear
+            if self.should_enhance_command(&command.command) {
+                if let Ok(analysis) = self.analyze_command(command, None).await {
+                    // Store analysis results in the command for later use in documentation
+                    // We could extend CommandEntry to include analysis data
+                }
+            }
+            
+            validated_commands.push(enhanced_command);
+        }
+        
+        Ok(validated_commands)
+    }
+
+    /// Check if a command should be filtered out
+    fn should_filter_command(&self, command: &str) -> bool {
+        let command = command.trim();
+        
+        // Filter out empty commands
+        if command.is_empty() {
+            return true;
+        }
+        
+        // Filter out clearly broken commands
+        if command.starts_with("bash: ") || command.starts_with("zsh: ") ||
+           command.starts_with("command not found") || command.contains("No such file") {
+            return true;
+        }
+        
+        // Filter out overly dangerous commands for documentation
+        let dangerous_patterns = [
+            "rm -rf /",
+            "dd if=/dev/zero of=/dev/sd",
+            "mkfs.",
+            "format c:",
+            "del /s /q c:\\",
+        ];
+        
+        for pattern in &dangerous_patterns {
+            if command.contains(pattern) {
+                return true;
+            }
+        }
+        
+        // Filter out commands that are just typos (too short and contain non-alphanumeric)
+        if command.len() < 3 && command.chars().any(|c| !c.is_alphanumeric() && c != '-' && c != '_') {
+            return true;
+        }
+        
+        false
+    }
+
+    /// Check if a command should be enhanced with AI analysis
+    fn should_enhance_command(&self, command: &str) -> bool {
+        let command = command.trim();
+        
+        // Enhance complex commands
+        if command.len() > 50 {
+            return true;
+        }
+        
+        // Enhance commands with multiple pipes or redirections
+        let pipe_count = command.matches('|').count();
+        let redirect_count = command.matches('>').count() + command.matches('<').count();
+        if pipe_count > 1 || redirect_count > 1 {
+            return true;
+        }
+        
+        // Enhance commands with complex options
+        if command.matches(" -").count() > 3 {
+            return true;
+        }
+        
+        // Enhance security-sensitive commands
+        if self.is_security_sensitive(command) {
+            return true;
+        }
+        
+        false
+    }
+
+    /// Generate documentation-optimized markdown for commands
+    pub async fn generate_enhanced_documentation(&mut self,
+        commands: &[CommandEntry],
+        session_context: Option<&str>) -> Result<String> {
+        
+        let mut documentation = String::new();
+        
+        // Group commands by logical workflow phases
+        let grouped_commands = self.group_commands_by_workflow(commands);
+        
+        for (phase, phase_commands) in grouped_commands {
+            documentation.push_str(&format!("\n## {} Phase\n\n", phase));
+            
+            for command in phase_commands {
+                // Generate enhanced documentation for each command
+                if let Ok(analysis) = self.analyze_command(&command, session_context).await {
+                    documentation.push_str(&self.format_command_documentation(&command, &analysis));
+                } else {
+                    // Fallback to basic documentation if AI analysis fails
+                    documentation.push_str(&self.format_basic_command_documentation(&command));
+                }
+            }
+        }
+        
+        Ok(documentation)
+    }
+
+    /// Group commands by workflow phases for better documentation structure
+    fn group_commands_by_workflow(&self, commands: &[CommandEntry]) -> Vec<(String, Vec<CommandEntry>)> {
+        use std::collections::HashMap;
+        
+        let mut groups: HashMap<String, Vec<CommandEntry>> = HashMap::new();
+        
+        for command in commands {
+            let phase = self.classify_workflow_phase(&command.command);
+            groups.entry(phase).or_insert_with(Vec::new).push(command.clone());
+        }
+        
+        // Return in logical order
+        let phase_order = vec![
+            "Setup".to_string(),
+            "Development".to_string(),
+            "Building".to_string(),
+            "Testing".to_string(),
+            "Deployment".to_string(),
+            "Monitoring".to_string(),
+            "Other".to_string(),
+        ];
+        
+        let mut result = Vec::new();
+        for phase in phase_order {
+            if let Some(commands) = groups.remove(&phase) {
+                if !commands.is_empty() {
+                    result.push((phase, commands));
+                }
+            }
+        }
+        
+        result
+    }
+
+    /// Classify command into workflow phase
+    fn classify_workflow_phase(&self, command: &str) -> String {
+        let cmd = command.to_lowercase();
+        
+        if cmd.contains("install") || cmd.contains("setup") || cmd.contains("init") || cmd.contains("clone") {
+            "Setup".to_string()
+        } else if cmd.contains("build") || cmd.contains("compile") || cmd.contains("make") {
+            "Building".to_string()
+        } else if cmd.contains("test") || cmd.contains("spec") || cmd.contains("check") {
+            "Testing".to_string()
+        } else if cmd.contains("deploy") || cmd.contains("release") || cmd.contains("publish") {
+            "Deployment".to_string()
+        } else if cmd.contains("monitor") || cmd.contains("log") || cmd.contains("ps") || cmd.contains("top") {
+            "Monitoring".to_string()
+        } else if cmd.contains("git") || cmd.contains("npm") || cmd.contains("cargo") || cmd.contains("python") {
+            "Development".to_string()
+        } else {
+            "Other".to_string()
+        }
+    }
+
+    /// Format command documentation with AI analysis
+    fn format_command_documentation(&self, command: &CommandEntry, analysis: &AnalysisResult) -> String {
+        let mut doc = String::new();
+        
+        doc.push_str(&format!("### {}\n\n", command.command));
+        
+        // Add AI-generated summary
+        if !analysis.summary.is_empty() {
+            doc.push_str(&format!("**Purpose:** {}\n\n", analysis.summary));
+        }
+        
+        // Add command details
+        doc.push_str("```bash\n");
+        doc.push_str(&command.command);
+        doc.push_str("\n```\n\n");
+        
+        // Add AI explanation
+        if !analysis.detailed_explanation.is_empty() {
+            doc.push_str("**Explanation:**\n");
+            doc.push_str(&analysis.detailed_explanation);
+            doc.push_str("\n\n");
+        }
+        
+        // Add issues if any
+        if !analysis.issues.is_empty() {
+            doc.push_str("**Important Notes:**\n");
+            for issue in &analysis.issues {
+                doc.push_str(&format!("- ⚠️ {}: {}\n", issue.description, issue.solution));
+            }
+            doc.push_str("\n");
+        }
+        
+        // Add alternatives if any
+        if !analysis.alternatives.is_empty() {
+            doc.push_str("**Alternatives:**\n");
+            for alt in &analysis.alternatives {
+                doc.push_str(&format!("- `{}` - {}\n", alt.command, alt.description));
+            }
+            doc.push_str("\n");
+        }
+        
+        doc.push_str("---\n\n");
+        doc
+    }
+
+    /// Format basic command documentation (fallback when AI analysis fails)
+    fn format_basic_command_documentation(&self, command: &CommandEntry) -> String {
+        let mut doc = String::new();
+        
+        doc.push_str(&format!("### {}\n\n", command.command));
+        
+        doc.push_str("```bash\n");
+        doc.push_str(&command.command);
+        doc.push_str("\n```\n\n");
+        
+        // Add basic output if available
+        if let Some(output) = &command.output {
+            if !output.trim().is_empty() && output.len() < 500 {
+                doc.push_str("**Output:**\n");
+                doc.push_str("```\n");
+                doc.push_str(output);
+                doc.push_str("\n```\n\n");
+            }
+        }
+        
+        // Add error information if available
+        if let Some(error) = &command.error {
+            if !error.trim().is_empty() {
+                doc.push_str("**Error:**\n");
+                doc.push_str("```\n");
+                doc.push_str(error);
+                doc.push_str("\n```\n\n");
+            }
+        }
+        
+        doc.push_str("---\n\n");
+        doc
+    }
+
+    /// Check if a command is security-sensitive (using existing method from prompt engine)
+    fn is_security_sensitive(&self, command: &str) -> bool {
+        let sensitive_patterns = [
+            "sudo", "su", "chmod", "chown", "passwd", "ssh", "scp", "rsync",
+            "curl", "wget", "rm -rf", "rm -f", "dd", "fdisk", "mount", "umount",
+            "iptables", "ufw", "firewall", "systemctl", "service",
+        ];
+
+        sensitive_patterns.iter().any(|pattern| command.contains(pattern))
     }
 }
 

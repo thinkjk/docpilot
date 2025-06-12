@@ -69,6 +69,8 @@ pub enum PromptType {
     PerformanceAnalysis,
     AlternativeSuggestion,
     WorkflowDocumentation,
+    MarkdownPostProcessing,
+    DocumentationEnhancement,
 }
 
 impl PromptEngine {
@@ -382,6 +384,90 @@ Please provide:
             },
         );
 
+        // Markdown Post-Processing Template
+        templates.insert(
+            PromptType::MarkdownPostProcessing,
+            PromptTemplate {
+                system_prompt: r#"You are an expert technical writer who specializes in refining and enhancing markdown documentation. Your role is to:
+
+1. **Clean and Format**: Fix formatting issues, improve structure, and ensure consistency
+2. **Remove Errors**: Identify and remove incorrect commands, broken syntax, or misleading information
+3. **Enhance Clarity**: Improve readability and comprehension without changing technical accuracy
+4. **Standardize**: Apply consistent formatting patterns and documentation standards
+5. **Optimize**: Make the documentation more useful and accessible to readers
+
+Focus on making the documentation professional, accurate, and easy to follow."#.to_string(),
+                user_prompt_template: r#"Please review and enhance this markdown documentation. Fix any issues, improve formatting, and ensure it follows best practices:
+
+**Original Markdown:**
+```markdown
+{{markdown_content}}
+```
+
+**Session Context**: {{session_description}}
+**Target Audience**: {{target_audience}}
+
+Please provide the improved markdown with:
+1. **Corrected Formatting**: Fix any markdown syntax issues
+2. **Enhanced Structure**: Improve headings, sections, and organization
+3. **Content Validation**: Remove or fix any incorrect commands or misleading information
+4. **Clarity Improvements**: Make explanations clearer and more concise
+5. **Professional Polish**: Ensure consistent style and professional presentation
+
+Return only the corrected markdown content."#.to_string(),
+                context_variables: vec![
+                    "markdown_content".to_string(),
+                    "session_description".to_string(),
+                    "target_audience".to_string(),
+                ],
+            },
+        );
+
+        // Documentation Enhancement Template
+        templates.insert(
+            PromptType::DocumentationEnhancement,
+            PromptTemplate {
+                system_prompt: r#"You are a senior technical documentation specialist who excels at creating comprehensive, user-friendly documentation. Your enhancements should be:
+
+1. **Comprehensive**: Add missing context, prerequisites, and explanations
+2. **User-Focused**: Consider different skill levels and use cases
+3. **Practical**: Include real-world examples and troubleshooting tips
+4. **Structured**: Organize information logically and hierarchically
+5. **Accessible**: Use clear language and helpful formatting
+
+Transform basic command documentation into professional-grade guides that teams can rely on."#.to_string(),
+                user_prompt_template: r#"Please enhance this terminal documentation to create comprehensive, professional documentation:
+
+**Command Information:**
+- **Commands**: {{command_list}}
+- **Session Description**: {{session_description}}
+- **Working Directory**: {{working_directory}}
+- **Platform**: {{platform}}
+
+**Current Documentation Level**: Basic command capture
+**Target Enhancement Level**: Professional team documentation
+
+Please provide enhanced documentation that includes:
+
+1. **Executive Summary**: Brief overview of what this documentation covers
+2. **Prerequisites**: What needs to be in place before following these steps
+3. **Step-by-Step Guide**: Clear, numbered instructions with explanations
+4. **Command Details**: Purpose and explanation for each command
+5. **Expected Outcomes**: What should happen at each step
+6. **Troubleshooting**: Common issues and solutions
+7. **Best Practices**: Tips for optimal execution
+8. **Related Resources**: Links to additional information where relevant
+
+Format as professional markdown documentation."#.to_string(),
+                context_variables: vec![
+                    "command_list".to_string(),
+                    "session_description".to_string(),
+                    "working_directory".to_string(),
+                    "platform".to_string(),
+                ],
+            },
+        );
+
         Self { templates }
     }
 
@@ -465,6 +551,52 @@ Please provide:
         }
 
         text.to_string()
+    }
+
+    /// Render template with custom variables (for specialized prompts)
+    pub fn render_template_with_vars(&self, template: &str, variables: &std::collections::HashMap<String, String>) -> Result<String> {
+        let mut rendered = template.to_string();
+
+        // Replace all provided variables
+        for (key, value) in variables {
+            let placeholder = format!("{{{{{}}}}}", key);
+            rendered = rendered.replace(&placeholder, value);
+        }
+
+        Ok(rendered)
+    }
+
+    /// Generate prompt for markdown post-processing
+    pub fn generate_markdown_processing_prompt(&self, markdown_content: &str, session_description: Option<&str>, target_audience: Option<&str>) -> Result<(String, String)> {
+        let template = self.templates.get(&PromptType::MarkdownPostProcessing)
+            .ok_or_else(|| anyhow::anyhow!("Markdown post-processing template not found"))?;
+
+        let mut variables = std::collections::HashMap::new();
+        variables.insert("markdown_content".to_string(), markdown_content.to_string());
+        variables.insert("session_description".to_string(), session_description.unwrap_or("General documentation").to_string());
+        variables.insert("target_audience".to_string(), target_audience.unwrap_or("Development team").to_string());
+
+        let system_prompt = template.system_prompt.clone();
+        let user_prompt = self.render_template_with_vars(&template.user_prompt_template, &variables)?;
+
+        Ok((system_prompt, user_prompt))
+    }
+
+    /// Generate prompt for documentation enhancement
+    pub fn generate_documentation_enhancement_prompt(&self, commands: &[String], session_description: Option<&str>, working_directory: &str, platform: &str) -> Result<(String, String)> {
+        let template = self.templates.get(&PromptType::DocumentationEnhancement)
+            .ok_or_else(|| anyhow::anyhow!("Documentation enhancement template not found"))?;
+
+        let mut variables = std::collections::HashMap::new();
+        variables.insert("command_list".to_string(), commands.join("\n- "));
+        variables.insert("session_description".to_string(), session_description.unwrap_or("Terminal session").to_string());
+        variables.insert("working_directory".to_string(), working_directory.to_string());
+        variables.insert("platform".to_string(), platform.to_string());
+
+        let system_prompt = template.system_prompt.clone();
+        let user_prompt = self.render_template_with_vars(&template.user_prompt_template, &variables)?;
+
+        Ok((system_prompt, user_prompt))
     }
 
     /// Get available prompt types

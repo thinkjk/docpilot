@@ -1226,7 +1226,21 @@ impl MarkdownTemplate {
                 full_context
             };
             
-            match analyzer_cell.borrow_mut().analyze_command(command, Some(&analysis_context)).await {
+            // Try to borrow mutably and perform analysis
+            let analysis_result = {
+                match analyzer_cell.try_borrow_mut() {
+                    Ok(mut analyzer) => {
+                        analyzer.analyze_command(command, Some(&analysis_context)).await
+                    }
+                    Err(_) => {
+                        // RefCell is already borrowed, skip AI analysis for this command
+                        eprintln!("AI analyzer is busy, skipping analysis for command: {}", command.command);
+                        return Ok(None);
+                    }
+                }
+            };
+
+            match analysis_result {
                 Ok(analysis) => {
                     // Filter analysis based on confidence score
                     if analysis.confidence_score >= config.min_confidence_score {
@@ -1503,6 +1517,181 @@ impl MarkdownGenerator {
         
         // Create a new template with AI analyzer
         self.template = MarkdownTemplate::with_config(config).with_ai_analyzer(llm_config);
+    }
+
+    /// Generate AI-enhanced documentation with post-processing
+    pub async fn generate_ai_enhanced_documentation(&mut self, session: &Session) -> Result<String> {
+        // First, validate and filter commands using AI
+        if let Some(ai_analyzer_cell) = &self.template.ai_analyzer {
+            let mut ai_analyzer = ai_analyzer_cell.borrow_mut();
+            
+            // Filter and validate commands
+            let validated_commands = ai_analyzer.validate_and_enhance_commands(&session.commands).await?;
+            
+            // Create a temporary session with validated commands for generation
+            let mut enhanced_session = session.clone();
+            enhanced_session.commands = validated_commands;
+            
+            // Generate the base documentation
+            let base_markdown = self.template.generate(&enhanced_session).await?;
+            
+            // Post-process the markdown using AI
+            let enhanced_markdown = self.post_process_markdown_with_ai(&base_markdown, &enhanced_session).await?;
+            
+            Ok(enhanced_markdown)
+        } else {
+            // Fallback to regular generation if no AI analyzer
+            self.template.generate(session).await
+        }
+    }
+
+    /// Post-process generated markdown using AI to improve quality
+    async fn post_process_markdown_with_ai(&self, markdown: &str, session: &Session) -> Result<String> {
+        if let Some(ai_analyzer_cell) = &self.template.ai_analyzer {
+            // Use try_borrow to avoid conflicts
+            match ai_analyzer_cell.try_borrow() {
+                Ok(_ai_analyzer) => {
+                    // Use the prompt engine to create a markdown post-processing prompt
+                    let prompt_engine = crate::llm::prompt::PromptEngine::new();
+                    let (system_prompt, user_prompt) = prompt_engine.generate_markdown_processing_prompt(
+                        markdown,
+                        Some(&session.description),
+                        Some("Development team")
+                    )?;
+                    
+                    // Query the LLM to improve the markdown
+                    let llm_response = self.query_llm_for_enhancement(&system_prompt, &user_prompt).await?;
+                    
+                    // Return the enhanced markdown or fall back to original if processing fails
+                    if llm_response.len() > 100 && !llm_response.contains("Analysis unavailable") {
+                        Ok(llm_response)
+                    } else {
+                        Ok(markdown.to_string())
+                    }
+                }
+                Err(_) => {
+                    // RefCell is already borrowed, skip post-processing
+                    eprintln!("AI analyzer is busy, skipping markdown post-processing");
+                    Ok(markdown.to_string())
+                }
+            }
+        } else {
+            Ok(markdown.to_string())
+        }
+    }
+
+    /// Query LLM for markdown enhancement
+    async fn query_llm_for_enhancement(&self, system_prompt: &str, user_prompt: &str) -> Result<String> {
+        if let Some(ai_analyzer_cell) = &self.template.ai_analyzer {
+            // Try to borrow and get config
+            let (provider_name, api_key) = match ai_analyzer_cell.try_borrow() {
+                Ok(ai_analyzer) => {
+                    // Get LLM configuration from the analyzer
+                    let config = ai_analyzer.get_config();
+                    
+                    // Get default provider
+                    let provider_name = config.get_default_provider()
+                        .ok_or_else(|| anyhow!("No default LLM provider configured"))?;
+
+                    // Get API key
+                    let api_key = config.get_api_key_with_fallback(provider_name)
+                        .ok_or_else(|| anyhow!("No API key found for provider: {}", provider_name))?;
+                    
+                    (provider_name.to_string(), api_key.to_string())
+                }
+                Err(_) => {
+                    return Err(anyhow!("AI analyzer is busy, cannot perform enhancement"));
+                }
+            };
+
+            // Create LLM client
+            let provider = crate::llm::client::LlmProvider::from_str(&provider_name)?;
+            let client = crate::llm::client::LlmClient::new(provider, api_key)?;
+
+            // Create request with higher token limit for documentation processing
+            let request = crate::llm::client::LlmRequest {
+                prompt: user_prompt.to_string(),
+                max_tokens: Some(4000), // Higher limit for documentation
+                temperature: Some(0.2), // Lower temperature for consistent formatting
+                system_prompt: Some(system_prompt.to_string()),
+            };
+
+            // Get response
+            match client.generate(request).await {
+                Ok(response) => Ok(response.content),
+                Err(e) => {
+                    eprintln!("LLM enhancement failed: {}", e);
+                    Err(anyhow!("Failed to enhance markdown: {}", e))
+                }
+            }
+        } else {
+            Err(anyhow!("No AI analyzer available for enhancement"))
+        }
+    }
+
+    /// Generate comprehensive documentation with AI assistance
+    pub async fn generate_comprehensive_ai_documentation(&mut self, session: &Session) -> Result<String> {
+        if let Some(ai_analyzer_cell) = &self.template.ai_analyzer {
+            // Try to borrow and generate enhanced documentation
+            let enhanced_doc = match ai_analyzer_cell.try_borrow_mut() {
+                Ok(mut ai_analyzer) => {
+                    // Use AI to generate enhanced documentation structure
+                    let _commands: Vec<String> = session.commands.iter().map(|c| c.command.clone()).collect();
+                    ai_analyzer.generate_enhanced_documentation(&session.commands, Some(&session.description)).await?
+                }
+                Err(_) => {
+                    eprintln!("AI analyzer is busy, generating basic documentation instead");
+                    return self.template.generate(session).await;
+                }
+            };
+            
+            // Combine with regular markdown generation for complete documentation
+            let base_markdown = self.template.generate(session).await?;
+            
+            // Merge AI-generated content with template-generated content
+            let combined_markdown = format!(
+                "{}\n\n## AI-Enhanced Analysis\n\n{}\n\n## Detailed Command Log\n\n{}",
+                self.generate_executive_summary(session),
+                enhanced_doc,
+                base_markdown
+            );
+            
+            // Post-process the combined content
+            self.post_process_markdown_with_ai(&combined_markdown, session).await
+        } else {
+            // Fallback to enhanced generation without AI analysis
+            self.generate_ai_enhanced_documentation(session).await
+        }
+    }
+
+    /// Generate executive summary for the documentation
+    fn generate_executive_summary(&self, session: &Session) -> String {
+        let mut summary = String::new();
+        
+        summary.push_str("# Executive Summary\n\n");
+        summary.push_str(&format!("This documentation captures the **{}** workflow session.\n\n", session.description));
+        
+        // Add session statistics
+        summary.push_str("## Session Overview\n\n");
+        summary.push_str(&format!("- **Total Commands**: {}\n", session.stats.total_commands));
+        summary.push_str(&format!("- **Successful Commands**: {}\n", session.stats.successful_commands));
+        summary.push_str(&format!("- **Failed Commands**: {}\n", session.stats.failed_commands));
+        summary.push_str(&format!("- **Annotations**: {}\n", session.stats.total_annotations));
+        
+        if let Some(duration) = session.get_duration_seconds() {
+            let hours = duration / 3600;
+            let minutes = (duration % 3600) / 60;
+            if hours > 0 {
+                summary.push_str(&format!("- **Duration**: {}h {}m\n", hours, minutes));
+            } else if minutes > 0 {
+                summary.push_str(&format!("- **Duration**: {}m\n", minutes));
+            } else {
+                summary.push_str(&format!("- **Duration**: {}s\n", duration));
+            }
+        }
+        
+        summary.push_str("\n");
+        summary
     }
 
     /// Create a minimal configuration for quick documentation
