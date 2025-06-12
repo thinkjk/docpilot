@@ -20,12 +20,16 @@ DocPilot automatically captures your terminal commands and generates comprehensi
 - **Automatic success/failure detection** with exit code capture
 - **Recent fixes** - Command capture now works reliably with proper session ID matching
 
-### 🤖 **AI-Powered Analysis**
+### 🤖 **AI-Powered Analysis** (Default when configured)
 
+- **AI-enhanced documentation by default** - Standard template automatically uses AI when LLM is configured
+- **Real-time progress indicators** - Clear feedback during AI processing to show generation status
 - **Multiple LLM providers** (Claude, ChatGPT, Gemini, Ollama)
-- **Intelligent command explanation** and context analysis
-- **Issue identification** and alternative suggestions
-- **Security recommendations** and best practices
+- **Intelligent command explanation** with purpose, prerequisites, and troubleshooting
+- **Workflow pattern analysis** and command relationship detection
+- **Issue identification** and alternative suggestions with confidence scores
+- **Security recommendations** and best practices generation
+- **Smart command filtering** - Removes problematic commands before AI analysis
 
 ### 🔒 **Privacy & Security**
 
@@ -157,11 +161,16 @@ docpilot annotate "Opened browser and navigated to localhost:3000"
 docpilot annotate "Verified the React app is running correctly"
 ```
 
-5. **Stop the session and generate documentation**:
+5. **Stop the session and generate documentation** (AI-enhanced by default):
 
 ```bash
 docpilot stop
 docpilot generate --output my-react-setup.md
+# 🤖 Using AI-enhanced documentation for standard template (LLM configured)
+# 🚀 Generating comprehensive AI-enhanced documentation...
+# 🔍 Analyzing command: npx create-react-app my-app
+# ✅ Analysis complete (confidence: 95.2%)
+# 🎉 Comprehensive AI documentation complete!
 ```
 
 ### Advanced Usage
@@ -182,13 +191,34 @@ docpilot export session-id --format json
 docpilot import backup.json
 ```
 
+#### Documentation Templates
+
+DocPilot offers 8 different templates with AI enhancement automatically enabled when LLM is configured:
+
+```bash
+# Standard template (AI-enhanced by default when LLM configured)
+docpilot generate --template standard --output guide.md
+
+# Explicit AI-enhanced template (requires LLM setup)
+docpilot generate --template ai-enhanced --output guide.md
+
+# Other templates (also AI-enhanced when LLM available)
+docpilot generate --template comprehensive   # Detailed with full metadata
+docpilot generate --template minimal        # Compact format
+docpilot generate --template hierarchical   # Organized by workflow phases
+docpilot generate --template professional   # Business-ready format
+docpilot generate --template technical      # Technical analysis focus
+docpilot generate --template rich          # Enhanced with emojis
+docpilot generate --template github        # GitHub-compatible format
+```
+
 #### Customization
 
 ```bash
 # View current configuration
 docpilot config
 
-# Set LLM provider and API key
+# Set LLM provider and API key for AI enhancement
 docpilot config --provider claude --api-key your-api-key
 
 # Note: Advanced configuration options like privacy filtering,
@@ -259,6 +289,10 @@ docker logs container-id
 docpilot annotate "Verified application is running in container"
 docpilot stop
 docpilot generate --output docker-setup.md --template comprehensive
+# 🤖 Using AI-enhanced documentation for comprehensive template (LLM configured)
+# 🔬 Generating comprehensive AI analysis...
+# 📊 Analyzing workflow patterns and command relationships...
+# 🎉 Comprehensive AI documentation complete!
 ```
 
 ### Example 2: Server Deployment
@@ -278,7 +312,13 @@ pm2 restart app
 nginx -t && systemctl reload nginx
 
 docpilot stop
-docpilot generate --output deployment-guide.md --include-optimizations
+docpilot generate --output deployment-guide.md
+# 🤖 AI analysis enabled - generating enhanced documentation...
+# 🔍 Analyzing command: ssh user@server
+# 🔍 Analyzing command: git pull origin main
+# ✅ Analysis complete (confidence: 88.5%)
+# 🤖 Applying AI post-processing to improve documentation quality...
+# ✅ Documentation generated successfully!
 ```
 
 ### Example 3: Debugging Session (Foreground Mode)
